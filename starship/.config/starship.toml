@@ -1,0 +1,93 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+format = """
+[](mauve)\
+$username\
+[](bg:surface0 fg:mauve)\
+$directory\
+[](fg:surface0 bg:blue)\
+$git_branch\
+$git_status\
+[](fg:blue bg:surface1)\
+$c\
+$rust\
+$golang\
+$nodejs\
+$php\
+$java\
+$kotlin\
+$haskell\
+$python\
+[](fg:surface1 bg:surface2)\
+$docker_context\
+[](fg:surface2 bg:maroon)\
+$time\
+[ ](fg:maroon)\
+$line_break$character"""
+
+palette = "catppuccin_mocha"
+
+[palettes.catppuccin_mocha]
+rosewater = "#f5e0dc"
+flamingo = "#f2cdcd"
+pink = "#f5c2e7"
+mauve = "#cba6f7"
+red = "#f38ba8"
+maroon = "#eba0ac"
+peach = "#fab387"
+yellow = "#f9e2af"
+green = "#a6e3a1"
+teal = "#94e2d5"
+sky = "#89dceb"
+sapphire = "#74c7ec"
+blue = "#89b4fa"
+lavender = "#b4befe"
+text = "#cdd6f4"
+subtext1 = "#bac2de"
+subtext0 = "#a6adc8"
+overlay2 = "#9399b2"
+overlay1 = "#7f849c"
+overlay0 = "#6c7086"
+surface2 = "#585b70"
+surface1 = "#45475a"
+surface0 = "#313244"
+base = "#1e1e2e"
+mantle = "#181825"
+crust = "#11111b"
+
+[username]
+show_always = true
+style_user = "bg:mauve fg:base"
+style_root = "bg:mauve fg:base"
+format = '[ $user ]($style)'
+
+[directory]
+style = "bg:surface0 fg:text"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[git_branch]
+symbol = ""
+style = "bg:blue fg:base"
+format = '[[ $symbol $branch ]($style)]($style)'
+
+[git_status]
+style = "bg:blue fg:base"
+format = '[[($all_status$ahead_behind )]($style)]($style)'
+
+[python]
+symbol = ""
+style = "bg:surface1 fg:text"
+format = '[[ $symbol $pyenv_prefix($version )(\($virtualenv\) )]($style)]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:maroon fg:base"
+format = '[[  $time ]($style)]($style)'
+
+[character]
+success_symbol = "[󱞩](bold mauve)"
+error_symbol = "[󱞩](bold red)"
+vimcmd_symbol = "[󱞪](bold green)"

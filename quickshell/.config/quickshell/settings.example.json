@@ -1,0 +1,39 @@
+{
+  "general": {
+    "weatherLatitude": "",
+    "weatherLongitude": "",
+    "useFahrenheit": true,
+    "clockFormat24hr": true,
+    "showSeconds": true,
+    "dateLong": false,
+    "showDayOfWeek": false,
+    "dateFormat": "DMY"
+  },
+  "screenshot": {
+    "defaultDelay": 0,
+    "saveToDisk": true,
+    "copyToClipboard": true,
+    "saveLocation": "~/Pictures/Screenshots"
+  },
+  "theme": {
+    "current": "Catppuccin"
+  },
+  "systemTray": {
+    "showBatteryDetails": true,
+    "showVolumeDetails": true,
+    "showNetworkDetails": false
+  },
+  "bar": {
+    "transparentBackground": false,
+    "backgroundStyle": "translucent",
+    "barOpacity": 0.5080479452054795,
+    "autoHide": false
+  },
+  "calendar": {
+    "filePath": "~/.config/quickshell/calendar.ics",
+    "refreshInterval": 15
+  },
+  "wallpaper": {
+    "showAllWallpapers": false
+  }
+}
