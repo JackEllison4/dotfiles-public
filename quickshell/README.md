@@ -2,7 +2,12 @@
 
 A more modified and customized shell with quicksettings, audio/network controls, weather, calendar, notifications, media controls, screen controls, screenshot widget, and more.
 
-![Preview](image.png)
+![Preview](image1.png)
+![Preview](image2.png)
+![Preview](image3.png)
+![Preview](image4.png)
+![Preview](image5.png)
+![Preview](image6.png)
 
 ## Features
 

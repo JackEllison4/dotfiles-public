@@ -33,7 +33,7 @@ This repository is designed to be managed with [GNU Stow](https://www.gnu.org/so
     stow hypr kitty zsh btop fastfetch
     ```
 
-## 🛠️ Components
+## Components
 
 - **Window Manager**: Hyprland
 - **Terminal**: Kitty
@@ -45,3 +45,14 @@ This repository is designed to be managed with [GNU Stow](https://www.gnu.org/so
 ---
 
 *Individual READMEs for Quickshell and Waybar can be found in their respective directories.*
+
+
+## Images
+
+![alt text](quickshell/image1.png) 
+![alt text](quickshell/image2.png) 
+![alt text](quickshell/image3.png) 
+![alt text](quickshell/image4.png) 
+![alt text](quickshell/image5.png) 
+![alt text](quickshell/image6.png)
+![alt text](waybar/image.png)
