@@ -41,7 +41,7 @@ The bar will typically start automatically if called in your Hyprland configurat
 exec-once = waybar
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 The configuration is located in `~/.config/waybar/config.jsonc` and styling in `~/.config/waybar/style.css`.
 
