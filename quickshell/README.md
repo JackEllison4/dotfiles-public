@@ -50,8 +50,6 @@ To start the shell:
 quickshell --path ~/.config/quickshell/shell.qml
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 Settings like bar position and auto-hide can be adjusted in `~/.config/quickshell/settings.json`.
-
-![Preview](image.png)
