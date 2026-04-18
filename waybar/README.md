@@ -44,5 +44,3 @@ exec-once = waybar
 ## Configuration
 
 The configuration is located in `~/.config/waybar/config.jsonc` and styling in `~/.config/waybar/style.css`.
-
-![Preview](image.png)
