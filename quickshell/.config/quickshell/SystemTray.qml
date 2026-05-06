@@ -23,9 +23,9 @@ Rectangle {
     property bool showVolumeDetails: false
     property bool showNetworkDetails: false
     
-    onShowBatteryDetailsChanged: console.log("🔧 SystemTray showBatteryDetails changed to:", showBatteryDetails)
-    onShowVolumeDetailsChanged: console.log("🔧 SystemTray showVolumeDetails changed to:", showVolumeDetails)
-    onShowNetworkDetailsChanged: console.log("🔧 SystemTray showNetworkDetails changed to:", showNetworkDetails)
+    onShowBatteryDetailsChanged: {}
+    onShowVolumeDetailsChanged: {}
+    onShowNetworkDetailsChanged: {}
     
     width: trayRow.width + 20
     height: 35
@@ -39,7 +39,6 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         z: 100
         onClicked: {
-            console.log("System Tray clicked - toggling control center")
             systemTray.toggleControlCenter()
         }
     }
@@ -61,18 +60,15 @@ Rectangle {
             updateNetwork()
             updateNetworkTraffic()
             loadSettings()
-            // Start the regular settings polling
-            settingsPollingTimer.running = true
+            // Settings will now reload via global signal
         }
     }
     
-    // Timer to periodically reload settings - only starts after initial delay
-    Timer {
-        id: settingsPollingTimer
-        interval: 1000  // Check every second
-        running: false
-        repeat: true
-        onTriggered: loadSettings()
+    Connections {
+        target: shellRoot
+        function onConfigVersionChanged() {
+            loadSettings();
+        }
     }
     
     // Load settings
@@ -101,7 +97,6 @@ Rectangle {
                         systemTray.showBatteryDetails = settings.systemTray.showBatteryDetails === true
                         systemTray.showVolumeDetails = settings.systemTray.showVolumeDetails === true
                         systemTray.showNetworkDetails = settings.systemTray.showNetworkDetails === true
-                        console.log("SystemTray settings loaded - battery:", systemTray.showBatteryDetails, "volume:", systemTray.showVolumeDetails, "network:", systemTray.showNetworkDetails)
                     }
                 } catch (e) {
                     console.error("Failed to parse settings for SystemTray:", e)
@@ -157,10 +152,7 @@ Rectangle {
                     color: ThemeManager.fgPrimary
                     visible: systemTray.showNetworkDetails
                     opacity: systemTray.showNetworkDetails ? 1.0 : 0.0
-                    
-                    Component.onCompleted: console.log("🌐 Network details text created, visible:", visible, "opacity:", opacity)
-                    onVisibleChanged: console.log("🌐 Network details visible changed to:", visible)
-                    
+
                     Behavior on opacity {
                         NumberAnimation { duration: 250 }
                     }
@@ -222,10 +214,7 @@ Rectangle {
                     color: ThemeManager.fgPrimary
                     visible: systemTray.showVolumeDetails
                     opacity: systemTray.showVolumeDetails ? 1.0 : 0.0
-                    
-                    Component.onCompleted: console.log("🔊 Volume details text created, visible:", visible, "opacity:", opacity)
-                    onVisibleChanged: console.log("🔊 Volume details visible changed to:", visible)
-                    
+
                     Behavior on opacity {
                         NumberAnimation { duration: 250 }
                     }
@@ -253,9 +242,8 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
                 
                 onClicked: {
-                    console.log("Battery icon clicked - launching power statistics")
                     // Try different battery management tools in order of preference
-                    Quickshell.execDetached(["sh", "-c", "if command -v gnome-power-statistics >/dev/null 2>&1; then gnome-power-statistics; elif command -v xfce4-power-manager-settings >/dev/null 2>&1; then xfce4-power-manager-settings; else notify-send 'Battery' 'Level: " + systemTray.batteryLevel + "%, Status: " + (systemTray.charging ? "Charging" : "Discharging") + "'; fi"])
+                    Quickshell.execDetached(["notify-send", "Battery", "Level: " + systemTray.batteryLevel + "%, Status: " + (systemTray.charging ? "Charging" : "Discharging")])
                 }
             }
             
@@ -300,10 +288,7 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: systemTray.showBatteryDetails
                     opacity: systemTray.showBatteryDetails ? 1.0 : 0.0
-                    
-                    Component.onCompleted: console.log("🔋 Battery details text created, visible:", visible, "opacity:", opacity)
-                    onVisibleChanged: console.log("🔋 Battery details visible changed to:", visible)
-                    
+
                     Behavior on opacity {
                         NumberAnimation { duration: 250 }
                     }
@@ -325,7 +310,6 @@ Rectangle {
         stdout: SplitParser {
             onRead: data => {
                 systemTray.volume = parseInt(data.trim()) || 0
-                console.log("Volume level:", systemTray.volume)
             }
         }
     }
@@ -338,7 +322,6 @@ Rectangle {
         stdout: SplitParser {
             onRead: data => {
                 systemTray.muted = (data.trim() === "1")
-                console.log("Mute status:", data.trim(), "muted:", systemTray.muted)
             }
         }
         
@@ -348,14 +331,16 @@ Rectangle {
         }
     }
     
-    Timer {
-        interval: 2000  // Check every 2 seconds
+    // Volume signal watcher - efficient and instant
+    Process {
+        id: volumeSignalWatcher
         running: true
-        repeat: true
-        triggeredOnStart: true
-        
-        onTriggered: {
-            muteProcess.running = true
+        command: ["sh", "-c", "pactl subscribe | grep --line-buffered \"sink\""]
+        stdout: SplitParser {
+            onRead: {
+                updateVolume();
+                muteProcess.running = true;
+            }
         }
     }
     
@@ -396,12 +381,10 @@ Rectangle {
         onRunningChanged: {
             if (!running && buffer !== "") {
                 let parts = buffer.trim().split('|')
-                console.log("SystemTray battery check:", parts.length, "parts:", JSON.stringify(parts))
                 if (parts.length >= 3) {
                     systemTray.batteryLevel = parseInt(parts[0]) || 100
                     systemTray.charging = parts[1].includes("Charging")
                     systemTray.acOnline = parts[2] === "1"
-                    console.log("SystemTray battery - Level:", systemTray.batteryLevel, "Charging:", systemTray.charging, "AC:", systemTray.acOnline)
                 }
                 buffer = ""
             } else if (running) {
@@ -410,14 +393,15 @@ Rectangle {
         }
     }
     
-    Timer {
-        interval: 5000  // Check every 5 seconds
+    // Battery signal watcher - efficient and instant
+    Process {
+        id: batterySignalWatcher
         running: true
-        repeat: true
-        triggeredOnStart: true
-        
-        onTriggered: {
-            batteryProcess.running = true
+        command: ["sh", "-c", "BAT_PATH=$(upower -e | grep battery | head -n 1); [ -n \"$BAT_PATH\" ] && gdbus monitor --system --dest org.freedesktop.UPower --object-path \"$BAT_PATH\""]
+        stdout: SplitParser {
+            onRead: {
+                updateBattery();
+            }
         }
     }
     
@@ -434,8 +418,7 @@ Rectangle {
         stdout: SplitParser {
             onRead: data => {
                 var type = data.trim().toLowerCase()
-                console.log("Network type detected:", type)
-                
+
                 if (type.includes("802-11-wireless") || type.includes("wireless") || type.includes("wifi")) {
                     systemTray.networkType = "wifi"
                     // If wifi, also get signal strength
@@ -464,19 +447,19 @@ Rectangle {
             onRead: data => {
                 var signal = parseInt(data.trim()) || 0
                 systemTray.signalStrength = signal
-                console.log("WiFi signal strength:", signal)
             }
         }
     }
     
-    Timer {
-        interval: 3000  // Check network every 3 seconds
+    // Network signal watcher - efficient and instant
+    Process {
+        id: networkSignalWatcher
         running: true
-        repeat: true
-        triggeredOnStart: true
-        
-        onTriggered: {
-            networkTypeProcess.running = true
+        command: ["gdbus", "monitor", "--system", "--dest", "org.freedesktop.NetworkManager", "--object-path", "/org/freedesktop/NetworkManager"]
+        stdout: SplitParser {
+            onRead: {
+                updateNetwork();
+            }
         }
     }
     
@@ -492,16 +475,19 @@ Rectangle {
     Process {
         id: trafficProcess
         command: ["sh", "-c", `
-            interface=$(ip route | grep default | awk '{print $5}' | head -1)
-            if [ -n "$interface" ]; then
-                rx=$(cat /sys/class/net/$interface/statistics/rx_bytes 2>/dev/null || echo 0)
-                tx=$(cat /sys/class/net/$interface/statistics/tx_bytes 2>/dev/null || echo 0)
-                echo "$rx $tx"
-            else
-                echo "0 0"
-            fi
+            while true; do
+                interface=$(ip route | grep default | awk '{print $5}' | head -1)
+                if [ -n "$interface" ]; then
+                    rx=$(cat /sys/class/net/$interface/statistics/rx_bytes 2>/dev/null || echo 0)
+                    tx=$(cat /sys/class/net/$interface/statistics/tx_bytes 2>/dev/null || echo 0)
+                    echo "$rx $tx"
+                else
+                    echo "0 0"
+                fi
+                sleep 5
+            done
         `]
-        running: false
+        running: true
         
         stdout: SplitParser {
             onRead: data => {
@@ -518,8 +504,8 @@ Rectangle {
                             var rxDiff = (rxBytes - systemTray.lastRxBytes) / 1024.0
                             var txDiff = (txBytes - systemTray.lastTxBytes) / 1024.0
                             
-                            systemTray.downloadSpeed = rxDiff / timeDiff
-                            systemTray.uploadSpeed = txDiff / timeDiff
+                            systemTray.downloadSpeed = Math.max(0, rxDiff / timeDiff)
+                            systemTray.uploadSpeed = Math.max(0, txDiff / timeDiff)
                         }
                     }
                     
@@ -528,17 +514,6 @@ Rectangle {
                     systemTray.lastTrafficCheck = currentTime
                 }
             }
-        }
-    }
-    
-    Timer {
-        interval: 2000  // Update traffic every 2 seconds
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        
-        onTriggered: {
-            updateNetworkTraffic()
         }
     }
     
@@ -555,7 +530,6 @@ Rectangle {
                     var child = trayRow.children[i]
                     if (child.hasOwnProperty("bluetoothAvailable")) {
                         child.bluetoothAvailable = (data.trim() === "1")
-                        console.log("Bluetooth available:", child.bluetoothAvailable)
                         break
                     }
                 }

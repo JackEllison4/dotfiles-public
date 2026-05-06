@@ -1,2 +1,10 @@
 #!/bin/bash
-touch /tmp/quickshell-settings.sock
+# Toggle settings widget
+# Uses secure temporary file approach to avoid TOCTOU race conditions
+
+SOCKET_DIR="${XDG_RUNTIME_DIR:-$HOME/.cache}"
+mkdir -p "$SOCKET_DIR"
+SOCKET="$SOCKET_DIR/.quickshell-settings.sock"
+touch "$SOCKET"
+sleep 0.1
+rm -f "$SOCKET" 2>/dev/null

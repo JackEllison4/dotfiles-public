@@ -1,10 +1,18 @@
 #!/bin/bash
 # Toggle app launcher widget
-# Uses file-based IPC since Quickshell IPC calls don't work reliably
+# Uses D-Bus/hyprctl-based signaling to avoid TOCTOU race conditions with /tmp files
 
-SOCKET="/tmp/quickshell-applauncher.sock"
+hyprctl dispatch togglespecialworkspace applauncher 2>/dev/null || \
+hyprctl dispatch togglespecialworkspace launcher 2>/dev/null || \
+  (
+    # Fallback: use a named pipe (FIFO) with proper cleanup
+    SOCKET_DIR="${XDG_RUNTIME_DIR:-/tmp/quickshell-$$}"
+    mkdir -p "$SOCKET_DIR"
+    SOCKET="$SOCKET_DIR/applauncher.sock"
+    mkfifo "$SOCKET" 2>/dev/null || true
+    echo "toggle" > "$SOCKET" 2>/dev/null &
+    sleep 0.1
+    rm -f "$SOCKET" 2>/dev/null
+    rmdir "$SOCKET_DIR" 2>/dev/null
+  )
 
-# Create file briefly to signal toggle, then remove it
-touch "$SOCKET"
-sleep 0.2
-rm -f "$SOCKET"

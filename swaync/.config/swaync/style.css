@@ -1,0 +1,335 @@
+/* ============================================================
+   SwayNC — Catppuccin Mocha × Android Material You
+   ============================================================ */
+
+@define-color base       #1e1e2e;
+@define-color mantle     #181825;
+@define-color crust      #11111b;
+@define-color surface0   #313244;
+@define-color surface1   #45475a;
+@define-color surface2   #585b70;
+@define-color overlay0   #6c7086;
+@define-color overlay1   #7f849c;
+@define-color overlay2   #9399b2;
+@define-color text       #cdd6f4;
+@define-color subtext0   #a6adc8;
+@define-color subtext1   #bac2de;
+@define-color blue       #89b4fa;
+@define-color lavender   #b4befe;
+@define-color sapphire   #74c7ec;
+@define-color teal       #94e2d5;
+@define-color green      #a6e3a1;
+@define-color yellow     #f9e2af;
+@define-color peach      #fab387;
+@define-color red        #f38ba8;
+@define-color maroon     #eba0ac;
+@define-color mauve      #cba6f7;
+@define-color pink       #f5c2e7;
+
+* {
+  font-family: "Inter", "JetBrains Mono", sans-serif;
+  font-size: 13px;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Control Center Window ─────────────────────────────── */
+.control-center {
+  background: alpha(@base, 0.92);
+  border-radius: 20px;
+  border: 1px solid alpha(@surface1, 0.6);
+  box-shadow: 0 8px 32px alpha(@crust, 0.8),
+              0 2px 8px alpha(@crust, 0.5);
+  padding: 12px;
+}
+
+/* ─── Title widget ──────────────────────────────────────── */
+.widget-title {
+  margin: 0 0 4px 0;
+}
+
+.widget-title > label {
+  font-size: 16px;
+  font-weight: 700;
+  color: @text;
+  padding: 4px 6px;
+}
+
+.widget-title > button {
+  background: transparent;
+  border: 1px solid alpha(@surface1, 0.7);
+  border-radius: 10px;
+  color: @subtext0;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.widget-title > button:hover {
+  background: alpha(@red, 0.15);
+  border-color: alpha(@red, 0.5);
+  color: @red;
+}
+
+.widget-title > button:active {
+  background: alpha(@red, 0.25);
+}
+
+/* ─── DND Toggle ────────────────────────────────────────── */
+.widget-dnd {
+  margin: 4px 0 8px 0;
+}
+
+.widget-dnd > switch {
+  background: alpha(@surface0, 0.8);
+  border-radius: 100px;
+  border: 1px solid alpha(@surface1, 0.6);
+}
+
+.widget-dnd > switch:checked {
+  background: alpha(@blue, 0.25);
+  border-color: alpha(@blue, 0.6);
+}
+
+.widget-dnd > switch slider {
+  background: @overlay1;
+  border-radius: 100px;
+  min-width: 18px;
+  min-height: 18px;
+}
+
+.widget-dnd > switch:checked slider {
+  background: @blue;
+}
+
+.widget-dnd > label {
+  color: @subtext1;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ─── Notifications List ────────────────────────────────── */
+.notifications-list {
+  padding: 0;
+}
+
+/* ─── Individual Notification Card ─────────────────────── */
+.notification-row {
+  padding: 0 0 8px 0;
+}
+
+.notification-row:last-child {
+  padding-bottom: 0;
+}
+
+.notification {
+  background: alpha(@surface0, 0.7);
+  border-radius: 16px;
+  border: 1px solid alpha(@surface1, 0.5);
+  padding: 14px;
+  box-shadow: 0 2px 8px alpha(@crust, 0.4);
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.notification:hover {
+  background: alpha(@surface1, 0.75);
+  border-color: alpha(@blue, 0.35);
+  box-shadow: 0 4px 16px alpha(@crust, 0.5);
+  transform: translateY(-1px);
+}
+
+.notification.critical {
+  border-left: 3px solid @red;
+  background: alpha(@red, 0.08);
+}
+
+.notification.low {
+  border-left: 3px solid @surface1;
+}
+
+/* ─── App Icon ──────────────────────────────────────────── */
+.notification-default-icon,
+.notification-icon {
+  min-width: 42px;
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+.notification-icon image {
+  border-radius: 12px;
+}
+
+/* ─── Notification Content ──────────────────────────────── */
+.notification-content {
+  padding: 0 0 0 12px;
+}
+
+.summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: @text;
+}
+
+.body {
+  font-size: 12px;
+  color: @subtext0;
+  margin-top: 3px;
+}
+
+.app-name {
+  font-size: 11px;
+  color: @overlay1;
+  margin-bottom: 4px;
+}
+
+.time {
+  font-size: 11px;
+  color: @overlay1;
+  margin: 0 2px;
+}
+
+/* ─── Action Buttons ────────────────────────────────────── */
+.notification-action {
+  background: alpha(@surface1, 0.6);
+  border-radius: 10px;
+  border: 1px solid alpha(@surface2, 0.5);
+  color: @blue;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+.notification-action:hover {
+  background: alpha(@blue, 0.18);
+  border-color: alpha(@blue, 0.55);
+  color: @blue;
+}
+
+.notification-action:active {
+  background: alpha(@blue, 0.3);
+}
+
+/* ─── Close Button ──────────────────────────────────────── */
+.close-button {
+  background: transparent;
+  border-radius: 100px;
+  border: none;
+  color: @overlay1;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px;
+}
+
+.close-button:hover {
+  background: alpha(@red, 0.18);
+  color: @red;
+}
+
+.close-button:active {
+  background: alpha(@red, 0.3);
+}
+
+/* ─── Notification Popup (the toast) ───────────────────── */
+.notification-popup {
+  background: alpha(@base, 0.94);
+  border-radius: 18px;
+  border: 1px solid alpha(@surface1, 0.55);
+  box-shadow: 0 8px 32px alpha(@crust, 0.8),
+              0 2px 8px alpha(@crust, 0.4);
+  padding: 14px;
+  margin: 8px;
+}
+
+.notification-popup:hover {
+  border-color: alpha(@blue, 0.4);
+}
+
+/* ─── MPRIS Widget ──────────────────────────────────────── */
+.widget-mpris {
+  padding: 8px 0 0 0;
+}
+
+.widget-mpris-player {
+  background: alpha(@surface0, 0.7);
+  border-radius: 16px;
+  border: 1px solid alpha(@surface1, 0.5);
+  padding: 14px;
+  margin: 4px 0 0 0;
+}
+
+.widget-mpris-album-art {
+  border-radius: 12px;
+  min-width: 72px;
+  min-height: 72px;
+}
+
+.widget-mpris-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: @text;
+}
+
+.widget-mpris-subtitle {
+  font-size: 12px;
+  color: @subtext0;
+}
+
+button.widget-mpris-control {
+  background: transparent;
+  border: none;
+  color: @subtext0;
+  border-radius: 100px;
+  padding: 4px 8px;
+  min-width: 32px;
+  min-height: 32px;
+  font-size: 18px;
+}
+
+button.widget-mpris-control:hover {
+  background: alpha(@surface1, 0.7);
+  color: @text;
+}
+
+button.widget-mpris-control.active {
+  color: @blue;
+}
+
+/* ─── Inhibitors ────────────────────────────────────────── */
+.widget-inhibitors {
+  margin: 0 0 8px 0;
+}
+
+.widget-inhibitors > button {
+  background: alpha(@peach, 0.15);
+  border: 1px solid alpha(@peach, 0.4);
+  border-radius: 10px;
+  color: @peach;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.widget-inhibitors > button:hover {
+  background: alpha(@peach, 0.25);
+}
+
+/* ─── Empty State ───────────────────────────────────────── */
+.notifications-list:empty {
+  /* Handled by swaync internally */
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────── */
+scrollbar {
+  background: transparent;
+  min-width: 4px;
+  min-height: 4px;
+}
+
+scrollbar slider {
+  background: alpha(@overlay0, 0.5);
+  border-radius: 100px;
+  min-width: 4px;
+  min-height: 4px;
+}
+
+scrollbar slider:hover {
+  background: alpha(@overlay1, 0.8);
+}

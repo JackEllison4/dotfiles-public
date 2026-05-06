@@ -497,115 +497,54 @@ Item {
         }
     }
     
-    // Update timer
-    Timer {
-        interval: 2000
+    // Consolidated System Monitor - Single persistent process for all stats
+    Process {
+        id: consolidatedMonitor
         running: root.active
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            cpuProcess.running = true
-            memProcess.running = true
-            diskProcess.running = true
-            tempProcess.running = true
-        }
-    }
-    
-    // CPU stats process
-    Process {
-        id: cpuProcess
-        command: ["sh", "-c", "top -bn2 -d 0.5 | grep '^%Cpu' | tail -1 | awk '{print 100-$8}' && nproc"]
-        running: false
-        property string buffer: ""
-        
-        stdout: SplitParser {
-            onRead: data => { cpuProcess.buffer += data + "\n" }
-        }
-        
-        onRunningChanged: {
-            if (!running && buffer !== "") {
-                const lines = buffer.trim().split('\n')
-                if (lines.length >= 1) {
-                    cpuMonitor.update(parseFloat(lines[0]) || 0)
-                }
-                if (lines.length >= 2) {
-                    cpuMonitor.coreCount = parseInt(lines[1]) || 0
-                }
-                buffer = ""
-            } else if (running) {
-                buffer = ""
-            }
-        }
-    }
-    
-    // Memory stats process
-    Process {
-        id: memProcess
-        command: ["sh", "-c", "free -g | awk 'NR==2 {printf \"%.1f\\n%.1f\\n%.1f\", ($3/$2)*100, $3, $2}'"]
-        running: false
-        property string buffer: ""
-        
-        stdout: SplitParser {
-            onRead: data => { memProcess.buffer += data + "\n" }
-        }
-        
-        onRunningChanged: {
-            if (!running && buffer !== "") {
-                const lines = buffer.trim().split('\n')
-                if (lines.length >= 3) {
-                    memMonitor.update(
-                        parseFloat(lines[0]) || 0,
-                        lines[1] || "0",
-                        lines[2] || "0"
-                    )
-                }
-                buffer = ""
-            } else if (running) {
-                buffer = ""
-            }
-        }
-    }
-    
-    // Disk stats process
-    Process {
-        id: diskProcess
-        command: ["sh", "-c", "df -h / | awk 'NR==2 {gsub(\"G\",\"\",$3); gsub(\"G\",\"\",$4); gsub(\"G\",\"\",$2); gsub(\"%\",\"\",$5); print $5\"\\n\"$3\"\\n\"$4\"\\n\"$2\"\\n\"$1}'"]
-        running: false
-        property string buffer: ""
-        
-        stdout: SplitParser {
-            onRead: data => { diskProcess.buffer += data + "\n" }
-        }
-        
-        onRunningChanged: {
-            if (!running && buffer !== "") {
-                const lines = buffer.trim().split('\n')
-                if (lines.length >= 5) {
-                    diskMonitor.update(
-                        parseFloat(lines[0]) || 0,
-                        lines[1] || "0",
-                        lines[2] || "0",
-                        lines[3] || "0",
-                        lines[4] || ""
-                    )
-                }
-                buffer = ""
-            } else if (running) {
-                buffer = ""
-            }
-        }
-    }
-    
-    // Temperature process
-    Process {
-        id: tempProcess
-        command: ["sh", "-c", "sensors 2>/dev/null | grep -E 'Package id 0|Tctl|Core 0' | head -1 | awk '{print $4}' | sed 's/[+°C]//g' || echo 0"]
-        running: false
+        command: ["sh", "-c", `
+            while true; do
+                # CPU
+                cpu=$(top -bn2 -d 0.5 | grep '^%Cpu' | tail -1 | awk '{print 100-$8}')
+                # Mem
+                mem=$(free -g | awk 'NR==2 {printf "%.1f|%.1f|%.1f", ($3/$2)*100, $3, $2}')
+                # Disk
+                disk=$(df -h / | awk 'NR==2 {gsub("G","",$3); gsub("G","",$4); gsub("G","",$2); gsub("%","",$5); printf "%s|%s|%s|%s|%s", $5, $3, $4, $2, $1}')
+                # Temp
+                temp=$(sensors 2>/dev/null | grep -E 'Package id 0|Tctl|Core 0' | head -1 | awk '{print $4}' | sed 's/[+°C]//g' || echo 0)
+                
+                echo "$cpu|$mem|$disk|$temp"
+                sleep 5
+            done
+        `]
         
         stdout: SplitParser {
             onRead: data => {
-                tempMonitor.update(parseFloat(data.trim()) || 0)
+                const parts = data.trim().split('|')
+                if (parts.length >= 10) {
+                    // CPU (0)
+                    cpuMonitor.update(parseFloat(parts[0]) || 0)
+                    
+                    // Mem (1, 2, 3)
+                    memMonitor.update(
+                        parseFloat(parts[1]) || 0,
+                        parts[2] || "0",
+                        parts[3] || "0"
+                    )
+                    
+                    // Disk (4, 5, 6, 7, 8)
+                    diskMonitor.update(
+                        parseFloat(parts[4]) || 0,
+                        parts[5] || "0",
+                        parts[6] || "0",
+                        parts[7] || "0",
+                        parts[8] || ""
+                    )
+                    
+                    // Temp (9)
+                    tempMonitor.update(parseFloat(parts[9]) || 0)
+                }
             }
         }
     }
+
 }

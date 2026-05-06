@@ -1,4 +1,5 @@
 # Catppuccin Mocha theme for btop
+# Main background, also used for more-looking background
 theme[main_bg]="#1e1e2e"
 
 # Main text color

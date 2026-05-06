@@ -38,43 +38,50 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // --- Backend polling via playerctl ---
+    // --- Event-driven metadata updates ---
     Process {
-        id: metaProcess
+        id: metaFollowProcess
         running: true
-        command: ["sh", "-c", "echo \"$(playerctl status 2>/dev/null)||$(playerctl metadata -f '{{title}}||{{artist}}||{{mpris:length}}||{{mpris:artUrl}}' 2>/dev/null)||$(playerctl position 2>/dev/null)\""]
+        // This command waits for changes and outputs them immediately
+        command: ["playerctl", "metadata", "--follow", "-f", "{{status}}||{{title}}||{{artist}}||{{mpris:length}}||{{mpris:artUrl}}||{{position}}"]
         
-        property string buffer: ""
         stdout: SplitParser {
-            onRead: data => { metaProcess.buffer += data }
-        }
-        
-        onRunningChanged: {
-            if (!running && buffer !== "") {
-                var parts = buffer.trim().split("||");
-                if (parts.length >= 6 && parts[0] !== "" && parts[1] !== "") {
+            onRead: line => {
+                var parts = line.trim().split("||");
+                if (parts.length >= 6) {
+                    // Update all metadata instantly
                     root.mStatus = parts[0];
                     root.mTitle = parts[1];
                     root.mArtist = parts[2] || "Unknown Artist";
                     root.mLength = Number(parts[3]) || 0;
                     root.mArtUrl = parts[4] || "";
-                    root.mPosition = Number(parts[5]) * 1000000 || 0; 
+                    
+                    // Sync position from player
+                    var playerPos = Number(parts[5]) * 1000000;
+                    // Only update if drift is significant (> 2s) to avoid jumping
+                    if (Math.abs(root.mPosition - playerPos) > 2000000 || root.mStatus !== "Playing") {
+                        root.mPosition = playerPos;
+                    }
                 } else {
                     root.mStatus = "";
                     root.mTitle = "";
                 }
-                buffer = "";
-            } else if (running) {
-                buffer = "";
             }
         }
     }
 
+    // Local position timer - only runs when music is playing
+    // This provides a smooth slider without constant process spawning
     Timer {
+        id: positionTimer
         interval: 1000
-        running: true
+        running: root.mStatus === "Playing"
         repeat: true
-        onTriggered: metaProcess.running = true
+        onTriggered: {
+            if (root.mPosition < root.mLength) {
+                root.mPosition += 1000000;
+            }
+        }
     }
 
     // Main Container
@@ -133,7 +140,16 @@ Item {
                     Image {
                         id: artImage
                         anchors.fill: parent
-                        source: root.mArtUrl ? (root.mArtUrl.startsWith("file://") ? root.mArtUrl : root.mArtUrl) : ""
+                        // Only allow safe URL schemes
+                        source: {
+                            if (!root.mArtUrl) return ""
+                            const url = String(root.mArtUrl)
+                            // Only allow http, https, or file schemes
+                            if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://")) {
+                                return url
+                            }
+                            return ""  // Reject any other scheme or path
+                        }
                         fillMode: Image.PreserveAspectCrop
                         visible: root.mArtUrl !== ""
                         

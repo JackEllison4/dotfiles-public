@@ -1,0 +1,34 @@
+# Sensitive files
+.env
+.env.*
+*.key
+*.token
+secrets.local
+.zshrc.local
+
+# User-specific settings
+settings.json
+# (Note: settings.json is often personal, but you may want to commit it if it contains shared UI preferences)
+
+# Binary icons/images that might be personal
+# sddm/theme/avatar.jpg
+
+# Backup files
+*.backup
+*.bak
+*~
+.backup-*/
+*-backup-*.sh
+*-old.sh
+*-before-*.sh
+*-manual-backup.sh
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+.qmlcache/

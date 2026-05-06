@@ -8,6 +8,7 @@ import json
 import threading
 import calendar
 import re
+import tempfile
 from datetime import date, datetime, timedelta
 
 current_app_class = "Desktop"
@@ -17,7 +18,10 @@ DB_DIR = os.path.expanduser("~/.local/share/focustime")
 os.makedirs(DB_DIR, exist_ok=True)
 DB_PATH = os.path.join(DB_DIR, "focustime.db")
 
-XDG_RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+XDG_RUNTIME = os.environ.get("XDG_RUNTIME_DIR")
+if not XDG_RUNTIME:
+    XDG_RUNTIME = os.path.join(os.path.expanduser("~"), ".cache", "focustime")
+    os.makedirs(XDG_RUNTIME, exist_ok=True)
 STATE_FILE = os.path.join(XDG_RUNTIME, "focustime_state.json")
 
 DESKTOP_CACHE_NAME = {}
@@ -77,10 +81,12 @@ def build_desktop_cache():
                             if wmclass:
                                 DESKTOP_CACHE_NAME[wmclass] = name
                                 DESKTOP_CACHE_ICON[wmclass] = icon
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except FileNotFoundError:
+                        pass  # Expected when .desktop file doesn't exist
+                    except (PermissionError, OSError):
+                        pass  # Cannot read file - skip it
+        except (FileNotFoundError, NotADirectoryError):
+            pass  # Directory doesn't exist - skip
     CACHE_BUILT = True
 
 def resolve_app_name(app_class, raw_title):
@@ -210,9 +216,19 @@ def listen_hyprland_ipc():
     hypr_sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
     if not hypr_sig: return
 
+    # Use XDG_RUNTIME_DIR properly; raise error if not available to prevent /tmp fallback
+    if not XDG_RUNTIME or not os.path.exists(XDG_RUNTIME):
+        return
+
     sock_path = f"{XDG_RUNTIME}/hypr/{hypr_sig}/.socket2.sock"
-    if not os.path.exists(sock_path):
-        sock_path = f"/tmp/hypr/{hypr_sig}/.socket2.sock"
+
+    # Verify socket path is within expected runtime directory to prevent symlink attacks
+    try:
+        sock_real = os.path.realpath(sock_path)
+        if not sock_real.startswith(os.path.realpath(XDG_RUNTIME)):
+            return
+    except (OSError, ValueError):
+        return
 
     while True:
         try:
@@ -231,12 +247,12 @@ def listen_hyprland_ipc():
                             current_app_class, current_app_title = "Locked", "Locked"
                         else:
                             current_app_class, current_app_title = cls, clean_title
-        except Exception:
-            time.sleep(2) 
+        except (ConnectionRefusedError, FileNotFoundError, OSError):
+            time.sleep(2)  # Wait before retrying connection 
 
 def dump_state_to_json(c):
     target_date = date.today()
-    
+
     yesterday = target_date - timedelta(days=1)
     c.execute('SELECT SUM(seconds) FROM focus_log WHERE log_date = ?', (yesterday.isoformat(),))
     yesterday_seconds = c.fetchone()[0] or 0
@@ -248,45 +264,45 @@ def dump_state_to_json(c):
 
     # Calculate average ONLY over days in current week that have non-zero usage
     c.execute('''
-        SELECT COUNT(DISTINCT log_date), SUM(seconds) 
-        FROM focus_log 
+        SELECT COUNT(DISTINCT log_date), SUM(seconds)
+        FROM focus_log
         WHERE log_date >= ? AND log_date <= ? AND seconds > 0
     ''', (monday.isoformat(), sunday.isoformat()))
     row = c.fetchone()
     days_count = row[0] or 0
     total_week = row[1] or 0
     average_seconds = total_week // days_count if days_count > 0 else 0
-    
+
     c.execute('SELECT SUM(seconds) FROM focus_log WHERE log_date = ?', (target_date.isoformat(),))
     total_seconds = c.fetchone()[0] or 0
 
     c.execute('''
-        SELECT app_class, COALESCE(app_title, app_class), SUM(seconds) as secs 
-        FROM focus_log 
-        WHERE log_date = ? 
-        GROUP BY app_class 
+        SELECT app_class, COALESCE(app_title, app_class), SUM(seconds) as secs
+        FROM focus_log
+        WHERE log_date = ?
+        GROUP BY app_class
         ORDER BY secs DESC
     ''', (target_date.isoformat(),))
-    
+
     all_apps = []
     for row in c.fetchall():
         app_class, app_title, secs = row
         percentage = (secs / total_seconds) * 100 if total_seconds > 0 else 0
         icon_str = get_app_icon(app_class)
         all_apps.append({
-            "class": app_class, 
-            "name": app_title, 
+            "class": app_class,
+            "name": app_title,
             "icon": icon_str,
-            "seconds": secs, 
+            "seconds": secs,
             "percent": round(percentage, 1)
         })
 
     # Weekly Top Apps
     c.execute('''
-        SELECT app_class, COALESCE(app_title, app_class), SUM(seconds) as secs 
-        FROM focus_log 
-        WHERE log_date >= ? AND log_date <= ? 
-        GROUP BY app_class 
+        SELECT app_class, COALESCE(app_title, app_class), SUM(seconds) as secs
+        FROM focus_log
+        WHERE log_date >= ? AND log_date <= ?
+        GROUP BY app_class
         ORDER BY secs DESC LIMIT 50
     ''', (monday.isoformat(), sunday.isoformat()))
     week_apps_rows = c.fetchall()
@@ -312,7 +328,7 @@ def dump_state_to_json(c):
     month_data = []
     _, num_days = calendar.monthrange(target_date.year, target_date.month)
     first_day = target_date.replace(day=1)
-    weekday_of_1st = first_day.weekday() 
+    weekday_of_1st = first_day.weekday()
 
     for _ in range(weekday_of_1st):
         month_data.append({"date": "", "total": -1, "is_target": False})
@@ -324,7 +340,7 @@ def dump_state_to_json(c):
         month_data.append({"date": d.isoformat(), "total": tot, "is_target": d == target_date})
 
     hourly_data = [0] * 48
-    
+
     try:
         c.execute('SELECT hour, SUM(seconds) FROM focus_hourly WHERE log_date = ? GROUP BY hour', (target_date.isoformat(),))
         for row in c.fetchall():
@@ -332,8 +348,8 @@ def dump_state_to_json(c):
             if 0 <= hr <= 23:
                 hourly_data[hr * 2] += secs
     except sqlite3.OperationalError:
-        pass 
-        
+        pass
+
     try:
         c.execute('SELECT interval_idx, SUM(seconds) FROM focus_intervals WHERE log_date = ? GROUP BY interval_idx', (target_date.isoformat(),))
         for row in c.fetchall():
@@ -341,7 +357,7 @@ def dump_state_to_json(c):
             if 0 <= idx < 96:
                 hourly_data[idx // 2] += secs
     except sqlite3.OperationalError:
-        pass 
+        pass
 
     # Week Heatmap (7x24)
     week_heatmap = [[0]*24 for _ in range(7)]
@@ -391,12 +407,12 @@ def dump_state_to_json(c):
         # Trim leading zero-activity minutes
         while start_idx < end_idx and minute_data[start_idx] == 0:
             start_idx += 1
-        
+
         # Trim trailing zero-activity minutes
         actual_end = end_idx - 1
         while actual_end > start_idx and minute_data[actual_end] == 0:
             actual_end -= 1
-            
+
         s_h, s_m = divmod(start_idx, 60)
         e_h, e_m = divmod(actual_end, 60)
         peak_str = f"{s_h:02d}:{s_m:02d} - {e_h:02d}:{e_m:02d}"
@@ -416,14 +432,18 @@ def dump_state_to_json(c):
         "week_heatmap": week_heatmap,
         "peak_usage_str": peak_str
     }
-    
+
+    # Use secure temporary file creation with atomic rename
     temp_file = STATE_FILE + ".tmp"
     try:
-        with open(temp_file, "w") as f:
+        # Create temp file in same directory to ensure atomic rename works
+        temp_dir = os.path.dirname(STATE_FILE) or '.'
+        fd, temp_file = tempfile.mkstemp(dir=temp_dir, prefix='.focustime_', suffix='.tmp')
+        with os.fdopen(fd, 'w') as f:
             json.dump(result, f)
         os.rename(temp_file, STATE_FILE)
-    except Exception:
-        pass
+    except (OSError, IOError):
+        pass  # Failed to write state file - continue anyway
 
 def main():
     global current_app_class, current_app_title
@@ -435,8 +455,10 @@ def main():
     conn = init_db()
     c = conn.cursor()
 
+    counter = 0
     while True:
         time.sleep(1)
+        counter += 1
         
         if current_app_class and current_app_class not in [""]:
             today = date.today().isoformat()
@@ -476,7 +498,9 @@ def main():
             
             conn.commit()
 
-        dump_state_to_json(c)
+        if counter >= 10:
+            dump_state_to_json(c)
+            counter = 0
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 Rectangle {
     id: archButton
@@ -7,6 +8,7 @@ Rectangle {
     width: 40
     height: 35
 
+    // Keep signal for compatibility but it's unused now
     signal toggleLauncher()
 
     color: {
@@ -34,7 +36,7 @@ Rectangle {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
 
-        onClicked: archButton.toggleLauncher()
+        onClicked: Quickshell.execDetached(["swaync-client", "-t"])
     }
 
     Behavior on color {

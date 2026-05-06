@@ -50,7 +50,9 @@ MouseArea {
     }
     
     onWheel: (wheel) => {
+        // Validate and clamp delta to safe bounds
         let delta = wheel.angleDelta.y > 0 ? 5 : -5
-        Quickshell.execDetached("pactl", ["set-sink-volume", "@DEFAULT_SINK@", (delta > 0 ? "+" : "") + delta + "%"])
+        let safeVolume = Math.max(-100, Math.min(100, delta))  // Explicit bounds
+        Quickshell.execDetached("pactl", ["set-sink-volume", "@DEFAULT_SINK@", (safeVolume > 0 ? "+" : "") + safeVolume + "%"])
     }
 }

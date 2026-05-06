@@ -11,8 +11,21 @@ save_to_disk=${3:-"true"}
 copy_to_clipboard=${4:-"true"}
 custom_location=${5:-"$save_dir"}
 
+# Validate and sanitize custom location to prevent path traversal
 if [ "$custom_location" != "$save_dir" ]; then
-    save_dir=$(eval echo "$custom_location")
+    # Expand ~ to $HOME
+    custom_location="${custom_location/#\~/$HOME}"
+    # Ensure path is absolute
+    if [[ "$custom_location" != /* ]]; then
+        custom_location="$HOME/$custom_location"
+    fi
+    # Resolve to canonical path to prevent directory traversal
+    if [ -d "$custom_location" ]; then
+        custom_location=$(cd "$custom_location" && pwd -P)
+    else
+        custom_location=$(cd "$(dirname "$custom_location")" 2>/dev/null && pwd -P) || custom_location="$save_dir"
+    fi
+    save_dir="$custom_location"
     mkdir -p "$save_dir"
 fi
 

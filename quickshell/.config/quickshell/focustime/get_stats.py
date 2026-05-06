@@ -65,10 +65,12 @@ def build_desktop_cache():
                             if wmclass:
                                 DESKTOP_CACHE_NAME[wmclass] = name
                                 DESKTOP_CACHE_ICON[wmclass] = icon
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except FileNotFoundError:
+                        pass  # Expected for missing .desktop files
+                    except (PermissionError, OSError):
+                        pass  # Cannot read file - skip it
+        except (FileNotFoundError, NotADirectoryError):
+            pass  # Directory doesn't exist - skip
     CACHE_BUILT = True
 
 def get_app_icon(app_class):
@@ -103,7 +105,7 @@ def main():
 
     if not os.path.exists(DB_PATH):
         print(json.dumps({
-            "total": 0, "average": 0, "week_range": "", "yesterday": 0, "current": "History", 
+            "total": 0, "average": 0, "week_range": "", "yesterday": 0, "current": "History",
             "apps": [], "week_apps": [], "week": [], "month": [], "hourly": [0]*48, "week_heatmap": [[0]*24 for _ in range(7)], "peak_usage_str": "N/A"
         }))
         return
@@ -111,12 +113,16 @@ def main():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    filter_sql = " AND app_class = ?" if app_filter else ""
-    params = (target_date.isoformat(), app_filter) if app_filter else (target_date.isoformat(),)
-
+    # Use parameterized queries without f-string injection
     yesterday = target_date - timedelta(days=1)
-    params_y = (yesterday.isoformat(), app_filter) if app_filter else (yesterday.isoformat(),)
-    c.execute(f'SELECT SUM(seconds) FROM focus_log WHERE log_date = ?{filter_sql}', params_y)
+
+    # Query yesterday's seconds
+    if app_filter:
+        c.execute('SELECT SUM(seconds) FROM focus_log WHERE log_date = ? AND app_class = ?',
+                  (yesterday.isoformat(), app_filter))
+    else:
+        c.execute('SELECT SUM(seconds) FROM focus_log WHERE log_date = ?',
+                  (yesterday.isoformat(),))
     yesterday_seconds = c.fetchone()[0] or 0
 
     # Calculate Weekly Average and Dates
@@ -124,27 +130,50 @@ def main():
     sunday = monday + timedelta(days=6)
     week_range_str = f"{monday.strftime('%b')} {monday.day} - {sunday.strftime('%b')} {sunday.day}"
 
-    params_avg = (monday.isoformat(), sunday.isoformat(), app_filter) if app_filter else (monday.isoformat(), sunday.isoformat())
-    c.execute(f'''
-        SELECT COUNT(DISTINCT log_date), SUM(seconds) 
-        FROM focus_log 
-        WHERE log_date >= ? AND log_date <= ? AND seconds > 0 {filter_sql}
-    ''', params_avg)
+    # Query week average
+    if app_filter:
+        c.execute('''
+            SELECT COUNT(DISTINCT log_date), SUM(seconds)
+            FROM focus_log
+            WHERE log_date >= ? AND log_date <= ? AND seconds > 0 AND app_class = ?
+        ''', (monday.isoformat(), sunday.isoformat(), app_filter))
+    else:
+        c.execute('''
+            SELECT COUNT(DISTINCT log_date), SUM(seconds)
+            FROM focus_log
+            WHERE log_date >= ? AND log_date <= ? AND seconds > 0
+        ''', (monday.isoformat(), sunday.isoformat()))
     row = c.fetchone()
     days_count = row[0] or 0
     total_week = row[1] or 0
     average_seconds = total_week // days_count if days_count > 0 else 0
 
-    c.execute(f'SELECT SUM(seconds) FROM focus_log WHERE log_date = ?{filter_sql}', params)
+    # Query total seconds for target date
+    if app_filter:
+        c.execute('SELECT SUM(seconds) FROM focus_log WHERE log_date = ? AND app_class = ?',
+                  (target_date.isoformat(), app_filter))
+    else:
+        c.execute('SELECT SUM(seconds) FROM focus_log WHERE log_date = ?',
+                  (target_date.isoformat(),))
     total_seconds = c.fetchone()[0] or 0
 
-    c.execute(f'''
-        SELECT app_class, COALESCE(app_title, app_class), SUM(seconds) as secs 
-        FROM focus_log 
-        WHERE log_date = ?{filter_sql}
-        GROUP BY app_class
-        ORDER BY secs DESC 
-    ''', params)
+    # Query apps for target date
+    if app_filter:
+        c.execute('''
+            SELECT app_class, COALESCE(app_title, app_class), SUM(seconds) as secs
+            FROM focus_log
+            WHERE log_date = ? AND app_class = ?
+            GROUP BY app_class
+            ORDER BY secs DESC
+        ''', (target_date.isoformat(), app_filter))
+    else:
+        c.execute('''
+            SELECT app_class, COALESCE(app_title, app_class), SUM(seconds) as secs
+            FROM focus_log
+            WHERE log_date = ?
+            GROUP BY app_class
+            ORDER BY secs DESC
+        ''', (target_date.isoformat(),))
     
     all_apps = []
     for row in c.fetchall():
@@ -158,6 +187,16 @@ def main():
             "seconds": secs,
             "percent": round(percentage, 1)
         })
+
+    # Build reusable filter helpers for f-string queries
+    if app_filter:
+        filter_sql = " AND app_class = ?"
+        params = (target_date.isoformat(), app_filter)
+        params_avg = (monday.isoformat(), sunday.isoformat(), app_filter)
+    else:
+        filter_sql = ""
+        params = (target_date.isoformat(),)
+        params_avg = (monday.isoformat(), sunday.isoformat())
 
     # Weekly Top Apps
     c.execute(f'''

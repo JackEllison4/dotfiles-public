@@ -23,4 +23,6 @@ fastfetch
 eval "$(starship init zsh)"
 
 # Aliases
-alias save='~/dotfiles/save.sh'
+alias save='~/dotfiles-public/save.sh'
+alias help='cat ~/help.md'
+export PATH="$HOME/.local/bin:$PATH"

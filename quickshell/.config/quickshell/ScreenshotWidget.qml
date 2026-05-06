@@ -46,7 +46,6 @@ PanelWindow {
     // Reload settings when window becomes visible
     onVisibleChanged: {
         if (visible) {
-            console.log("Screenshot widget opened, loading settings...")
             settingsLoader.running = true
         }
     }
@@ -73,7 +72,6 @@ PanelWindow {
                         saveToDisk = settings.screenshot.saveToDisk !== false
                         copyToClipboard = settings.screenshot.copyToClipboard === true
                         saveLocation = settings.screenshot.saveLocation || "~/Pictures/Screenshots"
-                        console.log("Screenshot settings loaded - delay:", delaySeconds, "saveToDisk:", saveToDisk, "copyToClipboard:", copyToClipboard, "location:", saveLocation)
                     }
                     if (settings.general && settings.general.enableBlur !== undefined) {
                         screenshotWindow.enableBlur = settings.general.enableBlur
@@ -101,9 +99,18 @@ PanelWindow {
         }
     }
     
+    function sanitizePath(path) {
+        // Expand ~
+        let sanitized = path.replace(/^~/, Quickshell.env("HOME"))
+        // Remove path traversal sequences
+        sanitized = sanitized.replace(/\.\.\//g, "")
+        sanitized = sanitized.replace(/\.\./g, "")
+        // Remove control characters and keep only safe chars
+        sanitized = sanitized.replace(/[^\w\-\.\/\s]/g, "")
+        return sanitized
+    }
+
     function takeScreenshot(mode) {
-        console.log("Taking screenshot - mode:", mode, "delay:", delaySeconds, "save:", saveToDisk, "copy:", copyToClipboard)
-        
         // Build command arguments for helper script
         var scriptPath = Quickshell.env("HOME") + "/.config/quickshell/take-screenshot.sh"
         var args = [
@@ -111,16 +118,14 @@ PanelWindow {
             delaySeconds.toString(),
             saveToDisk ? "true" : "false",
             copyToClipboard ? "true" : "false",
-            saveLocation
+            sanitizePath(saveLocation)  // Sanitize the path
         ]
-        
-        console.log("Executing:", scriptPath, args.join(" "))
-        
+
         // For interactive modes (window/region), close widget immediately, then start process
         if (mode === "window" || mode === "region") {
             // Close widget immediately so it doesn't interfere with screenshot
             closeRequested()
-            
+
             // Delay process start to let widget fully disappear
             delayedStartTimer.mode = mode
             delayedStartTimer.scriptPath = scriptPath

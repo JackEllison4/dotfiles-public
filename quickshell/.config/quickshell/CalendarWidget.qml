@@ -51,7 +51,7 @@ Rectangle {
                     if (settings.general && settings.general.enableBlur !== undefined) {
                         root.enableBlur = settings.general.enableBlur
                     }
-                } catch (e) {}
+                } catch (e) { console.error("Failed to parse calendar widget settings:", e); }
                 buffer = ""
             } else if (running) {
                 buffer = ""
@@ -657,9 +657,9 @@ Rectangle {
                     
                     const tempUnit = useFahrenheit ? "u" : "m"
                     let location = (latitude && longitude) ? `${latitude},${longitude}` : ""
-                    let weatherCmd = `curl -s "wttr.in/${location}?${tempUnit}&format=%c|%t|%C|%h|%w"`
+                    let weatherCmd = "wttr.in/" + location + "?" + tempUnit + "&format=%c|%t|%C|%h|%w"
                     
-                    weatherProcess.command = ["sh", "-c", weatherCmd]
+                    weatherProcess.command = ["curl", "-s", weatherCmd]
                     weatherProcess.running = true
                 } catch (e) {
                     console.error("Failed to parse settings:", e)

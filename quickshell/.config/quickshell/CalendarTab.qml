@@ -189,7 +189,6 @@ Item {
                 repeat: true
                 triggeredOnStart: false
                 onTriggered: {
-                    console.log("🔄 Auto-refreshing calendar data...")
                     calendarModel.triggerCalendarLoad()
                 }
             }
@@ -720,9 +719,8 @@ Item {
                     }
                 }
             }
-            
+
             eventsModel = filtered
-            console.log("📅 Filtered events for", selectedDateText, ":", filtered.length, "events")
         }
         
         function loadEvents() {
@@ -795,25 +793,27 @@ Item {
             if (paths.length === 0) {
                 paths = [Quickshell.env("HOME") + "/.config/quickshell/calendar.ics"]
             }
-            console.log("📅 Loading calendar from:", paths.join(", "))
-            
-            // Detect if path is URL or local file
-            let isUrl = paths.some(p => p.startsWith("http://") || p.startsWith("https://"))
-            
-            if (isUrl) {
-                // Fetch from URL using curl
-                let curlCommands = paths.map(p => {
-                    if (p.startsWith("http://") || p.startsWith("https://")) {
-                        return `curl -s -L "${p}"`
-                    } else {
-                        return `(test -f "${p}" && cat "${p}")`
-                    }
-                }).join(" ; echo ''; ")
-                icalLoader.command = ["sh", "-c", curlCommands]
+
+            // Safe command construction - avoid sh -c with interpolated paths
+            // Use argument arrays so paths are never interpreted as shell code
+            if (paths.length === 1) {
+                let p = paths[0]
+                if (p.startsWith("http://") || p.startsWith("https://")) {
+                    icalLoader.command = ["curl", "-s", "-L", p]
+                } else {
+                    icalLoader.command = ["cat", p]
+                }
             } else {
-                // Read local files
-                let catCommands = paths.map(p => `(test -f "${p}" && cat "${p}" && echo "")`).join(" ; ")
-                icalLoader.command = ["sh", "-c", catCommands]
+                // Multiple paths: use a safe concatenation approach
+                // Build a script that only uses positional parameters (no interpolation)
+                let isUrl = paths.some(p => p.startsWith("http://") || p.startsWith("https://"))
+                if (isUrl) {
+                    // For mixed URL + local paths, pass paths as positional args
+                    let script = 'for p in "$@"; do if echo "$p" | grep -qE "^https?://"; then curl -s -L "$p"; else test -f "$p" && cat "$p"; fi; echo ""; done'
+                    icalLoader.command = ["sh", "-c", script, "--"].concat(paths)
+                } else {
+                    icalLoader.command = ["cat"].concat(paths)
+                }
             }
             
             icalLoader.running = true
@@ -889,11 +889,9 @@ Item {
             if (running) {
                 buffer = ""
             } else if (!running && buffer !== "") {
-                console.log("📅 iCal file content length:", buffer.length, "characters")
                 icalLoader.parseICalData(buffer)
             } else if (!running) {
                 // Initialize empty cache if no data
-                console.log("📅 No calendar data loaded")
                 calendarModel.eventDatesCache = {}
                 calendarModel.eventsModel = []
                 calendarModel.updateEventDots()
@@ -1008,14 +1006,12 @@ Item {
             // Store all events and build cache for current month only
             calendarModel.allEventsCache = allEvents
             calendarModel.eventDatesCache = {}  // Clear old cache
-            
-            console.log("📅 Parsed", totalEvents, "total events into cache")
-            
+
             // Build event cache for current month (fast)
             calendarModel.buildEventCacheForMonth(calendarModel.currentYear, calendarModel.currentMonth)
-            
+
             calendarModel.eventsRevision++
-            
+
             // Filter events for the currently selected day
             calendarModel.filterEventsForSelectedDay()
             

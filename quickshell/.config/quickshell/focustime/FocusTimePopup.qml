@@ -105,7 +105,7 @@ Item {
     property bool isFirstLoad: true
     readonly property bool isTodaySelected: getIsoDate(window.activeDate) === getIsoDate(new Date()) && window.selectedAppClass === ""
 
-    readonly property string scriptsDir: Quickshell.env("HOME") + "/.config/hypr/scripts/quickshell/focustime"
+    readonly property string scriptsDir: Quickshell.env("HOME") + "/.config/quickshell/focustime"
     readonly property string xdgRuntime: Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"
     readonly property string stateFilePath: window.xdgRuntime + "/focustime_state.json"
 
@@ -178,7 +178,7 @@ Item {
 
     property real globalOrbitAngle: 0
     NumberAnimation on globalOrbitAngle {
-        from: 0; to: Math.PI * 2; duration: 120000; loops: Animation.Infinite; running: true
+        from: 0; to: Math.PI * 2; duration: 120000; loops: Animation.Infinite; running: window.visible
     }
 
     // --- SHARED DATA INGESTION ---
@@ -293,7 +293,7 @@ Item {
 
     Timer { 
         interval: 1000
-        running: window.isTodaySelected 
+        running: window.isTodaySelected && window.visible
         repeat: true
         onTriggered: window.requestDataUpdate()
     }

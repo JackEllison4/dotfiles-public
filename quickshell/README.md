@@ -2,13 +2,6 @@
 
 A more modified and customized shell with quicksettings, audio/network controls, weather, calendar, notifications, media controls, screen controls, screenshot widget, and more.
 
-![Preview](image1.png)
-![Preview](image2.png)
-![Preview](image3.png)
-![Preview](image4.png)
-![Preview](image5.png)
-![Preview](image6.png)
-
 ## Features
 
 - **Control Center**: Quick access to audio, network, battery, and system power settings.
@@ -38,7 +31,7 @@ To ensure all features work correctly, please install the following:
 - `matugen`: For dynamic color generation (if enabled).
 - `power-profiles-daemon`: For power management control.
 
-## Usage
+## 🚀 Usage
 
 If you are using GNU Stow:
 ```bash
@@ -53,3 +46,13 @@ quickshell --path ~/.config/quickshell/shell.qml
 ## Configuration
 
 Settings like bar position and auto-hide can be adjusted in `~/.config/quickshell/settings.json`.
+
+
+## Preview
+
+![Preview](image1.png)
+![alt text](image2.png)
+![alt text](image3.png)
+![alt text](image4.png)
+![alt text](image5.png)
+![alt text](image6.png)

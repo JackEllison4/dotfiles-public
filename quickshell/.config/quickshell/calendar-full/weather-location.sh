@@ -12,7 +12,9 @@ mkdir -p "${cache_dir}"
 
 # Load environment variables
 if [ -f "$ENV_FILE" ]; then
-    export $(grep -v '^#' "$ENV_FILE" | xargs)
+    set -a
+    source "$ENV_FILE"
+    set +a
 fi
 
 # API Settings
@@ -51,11 +53,11 @@ get_location() {
 # ============================================================
 get_icon() {
     case $1 in
-        "50d"|"50n") echo "" ;;
+        "50d"|"50n") echo "" ;;
         "01d") echo "" ;;
         "01n") echo "" ;;
         "02d"|"02n"|"03d"|"03n"|"04d"|"04n") echo "" ;;
-        "09d"|"09n"|"10d"|"10n") echo "" ;;
+        "09d"|"09n"|"10d"|"10n") echo "" ;;
         "11d"|"11n") echo "" ;;
         "13d"|"13n") echo "" ;;
         *) echo "" ;;
@@ -77,32 +79,53 @@ get_hex() {
 
 write_dummy_data() {
     local msg="${1:-No API Key}"
-    final_json="["
+
+    # Build forecast array using jq for safe JSON construction
+    local forecast_array=$(jq -n '[]')
+
     for i in {0..4}; do
         future_date=$(date -u +%Y-%m-%d -d "+$i days")
         f_day=$(date -u -d "$future_date" "+%a" 2>/dev/null)
         f_full_day=$(date -u -d "$future_date" "+%A" 2>/dev/null)
         f_date_num=$(date -u -d "$future_date" "+%d %b" 2>/dev/null)
 
-        final_json="${final_json} {
-            \"id\": \"${i}\",
-            \"day\": \"${f_day}\",
-            \"day_full\": \"${f_full_day}\",
-            \"date\": \"${f_date_num}\",
-            \"max\": \"0.0\",
-            \"min\": \"0.0\",
-            \"feels_like\": \"0.0\",
-            \"wind\": \"0\",
-            \"humidity\": \"0\",
-            \"pop\": \"0\",
-            \"icon\": \"\",
-            \"hex\": \"#a6adc8\",
-            \"desc\": \"${msg}\",
-            \"hourly\": [{\"time\": \"00:00\", \"temp\": \"0.0\", \"icon\": \"\", \"hex\": \"#a6adc8\"}]
-        },"
+        # Create hourly entry safely
+        hourly_entry=$(jq -n '{time: "00:00", temp: "0.0", icon: "", hex: "#a6adc8"}')
+
+        # Create day entry with all fields properly quoted and escaped
+        day_entry=$(jq -n \
+            --arg id "$i" \
+            --arg day "$f_day" \
+            --arg day_full "$f_full_day" \
+            --arg date "$f_date_num" \
+            --arg desc "$msg" \
+            --argjson hourly "[$hourly_entry]" \
+            '{
+                id: $id,
+                day: $day,
+                day_full: $day_full,
+                date: $date,
+                max: "0.0",
+                min: "0.0",
+                feels_like: "0.0",
+                wind: "0",
+                humidity: "0",
+                pop: "0",
+                icon: "",
+                hex: "#a6adc8",
+                desc: $desc,
+                hourly: $hourly
+            }')
+
+        # Append to array
+        forecast_array=$(echo "$forecast_array" | jq --argjson entry "$day_entry" '. += [$entry]')
     done
-    final_json="${final_json%,}]"
-    echo "{ \"location\": \"Unknown\", \"forecast\": ${final_json} }" > "${json_file}"
+
+    # Create final JSON with location and forecast
+    final_json=$(echo "$forecast_array" | jq -n --slurpfile forecast /dev/stdin '{location: "Unknown", forecast: $forecast[0]}')
+
+    echo "$final_json" > "${json_file}.tmp"
+    mv "${json_file}.tmp" "${json_file}"
 }
 
 get_data() {
@@ -117,9 +140,18 @@ get_data() {
     lat=$(echo "$location" | cut -d',' -f1)
     lon=$(echo "$location" | cut -d',' -f2)
 
-    # Fetch weather data using lat/lon
-    forecast_url="https://api.openweathermap.org/data/2.5/forecast?appid=${KEY}&lat=${lat}&lon=${lon}&units=${UNIT}"
-    raw_api=$(curl -sf "$forecast_url")
+    # Fetch weather data using lat/lon with safe curl config
+    local curl_config=$(mktemp)
+    trap "rm -f '$curl_config'" RETURN
+
+    cat > "$curl_config" <<EOF
+url = "https://api.openweathermap.org/data/2.5/forecast?appid=${KEY}&lat=${lat}&lon=${lon}&units=${UNIT}"
+silent
+show-error
+fail
+EOF
+
+    raw_api=$(curl -K "$curl_config" 2>/dev/null)
 
     api_cod=$(echo "$raw_api" | jq -r '.cod' 2>/dev/null)
 
@@ -132,23 +164,31 @@ get_data() {
         return
     fi
 
-    # Process API response (use UTC dates to match API)
-    current_date=$(date -u +%Y-%m-%d)
-    tomorrow_date=$(date -u -d "tomorrow" +%Y-%m-%d)
+    # Process API response converting UTC to local time using city.timezone
+    current_date=$(date +%Y-%m-%d)
 
-    processed_forecast=$(echo "$raw_api" | jq ".list |= [.[] | select(.dt_txt | startswith(\"$current_date\") or startswith(\"$tomorrow_date\") or startswith(\"${current_date:0:7}\"))]")
+    processed_api=$(echo "$raw_api" | jq '
+      .city.timezone as $tz |
+      .list |= map(
+        .dt_local = .dt + $tz |
+        .local_date = (.dt_local | todate | split("T")[0]) |
+        .local_time = (.dt_local | todate | split("T")[1] | .[0:5])
+      )
+    ' 2>/dev/null)
 
-    if [ ! -z "$processed_forecast" ]; then
+    processed_forecast=$(echo "$processed_api" | jq ".list |= [.[] | select(.local_date >= \"$current_date\")]" 2>/dev/null)
+
+    if [ ! -z "$processed_forecast" ] && [ "$processed_forecast" != "null" ]; then
         # Extract city name from raw API (try multiple paths)
         city_name=$(echo "$raw_api" | jq -r '.city.name // .name // "Unknown"' 2>/dev/null)
 
-        dates=$(echo "$processed_forecast" | jq -r '.list[].dt_txt | split(" ")[0]' | sort -u | head -n 5)
+        dates=$(echo "$processed_forecast" | jq -r '.list[].local_date' | sort -u | head -n 5)
 
-        final_json="["
+        local forecast_array=$(jq -n '[]')
         counter=0
 
         for d in $dates; do
-            day_data=$(echo "$processed_forecast" | jq "[.list[] | select(.dt_txt | startswith(\"$d\"))]")
+            day_data=$(echo "$processed_forecast" | jq "[.list[] | select(.local_date == \"$d\")]")
 
             raw_max=$(echo "$day_data" | jq '[.[].main.temp_max] | max')
             f_max_temp=$(printf "%.0f" "$raw_max")
@@ -159,8 +199,7 @@ get_data() {
             raw_feels=$(echo "$day_data" | jq '[.[].main.feels_like] | add / length')
             f_feels_like=$(printf "%.0f" "$raw_feels")
 
-            f_pop=$(echo "$day_data" | jq '[.[].pop] | max')
-            f_pop_pct=$(echo "$f_pop * 100" | bc 2>/dev/null | cut -d. -f1)
+            f_pop_pct=$(echo "$day_data" | jq '[.[].pop // 0] | max * 100 | round' 2>/dev/null)
 
             f_wind=$(echo "$day_data" | jq '[.[].wind.speed] | max' 2>/dev/null | xargs printf "%.0f")
             f_hum=$(echo "$day_data" | jq '[.[].main.humidity] | add / length' 2>/dev/null | xargs printf "%.0f")
@@ -170,51 +209,85 @@ get_data() {
             f_icon=$(get_icon "$f_code")
             f_hex=$(get_hex "$f_code")
 
-            # Use UTC date directly from API (don't convert to local)
-            f_day=$(date -u -d "$d" "+%a" 2>/dev/null)
-            f_full_day=$(date -u -d "$d" "+%A" 2>/dev/null)
-            f_date_num=$(date -u -d "$d" "+%d %b" 2>/dev/null)
+            # Use local date for formatting
+            f_day=$(date -d "$d" "+%a" 2>/dev/null)
+            f_full_day=$(date -d "$d" "+%A" 2>/dev/null)
+            f_date_num=$(date -d "$d" "+%d %b" 2>/dev/null)
 
-            hourly_json="["
-            count_slots=$(echo "$day_data" | jq '. | length')
+            # Build hourly data using jq - properly escape all values
+            hourly_array=$(echo "$day_data" | jq '[
+                .[] |
+                {
+                    time: .local_time,
+                    temp: (.main.temp | floor | tostring),
+                    icon: (.weather[0].icon as $code |
+                        if $code == "50d" or $code == "50n" then ""
+                        elif $code == "01d" then ""
+                        elif $code == "01n" then ""
+                        elif $code == "02d" or $code == "02n" or $code == "03d" or $code == "03n" or $code == "04d" or $code == "04n" then ""
+                        elif $code == "09d" or $code == "09n" or $code == "10d" or $code == "10n" then ""
+                        elif $code == "11d" or $code == "11n" then ""
+                        elif $code == "13d" or $code == "13n" then ""
+                        else ""
+                        end
+                    ),
+                    hex: (.weather[0].icon as $code |
+                        if $code == "50d" or $code == "50n" then "#94e2d5"
+                        elif $code == "01d" then "#f9e2af"
+                        elif $code == "01n" then "#cba6f7"
+                        elif $code == "02d" or $code == "02n" or $code == "03d" or $code == "03n" or $code == "04d" or $code == "04n" then "#a6adc8"
+                        elif $code == "09d" or $code == "09n" or $code == "10d" or $code == "10n" then "#89dceb"
+                        elif $code == "11d" or $code == "11n" then "#f5c2e7"
+                        elif $code == "13d" or $code == "13n" then "#bac2de"
+                        else "#a6adc8"
+                        end
+                    )
+                }
+            ]')
 
-            for i in $(seq 0 1 $((count_slots-1))); do
-                slot_item=$(echo "$day_data" | jq ".[$i]")
+            # Create day entry safely with jq
+            day_entry=$(jq -n \
+                --arg id "$counter" \
+                --arg day "$f_day" \
+                --arg day_full "$f_full_day" \
+                --arg date "$f_date_num" \
+                --arg max "$f_max_temp" \
+                --arg min "$f_min_temp" \
+                --arg feels_like "$f_feels_like" \
+                --arg wind "$f_wind" \
+                --arg humidity "$f_hum" \
+                --arg pop "$f_pop_pct" \
+                --arg icon "$f_icon" \
+                --arg hex "$f_hex" \
+                --arg desc "$f_desc" \
+                --argjson hourly "$hourly_array" \
+                '{
+                    id: $id,
+                    day: $day,
+                    day_full: $day_full,
+                    date: $date,
+                    max: $max,
+                    min: $min,
+                    feels_like: $feels_like,
+                    wind: $wind,
+                    humidity: $humidity,
+                    pop: $pop,
+                    icon: $icon,
+                    hex: $hex,
+                    desc: $desc,
+                    hourly: $hourly
+                }')
 
-                s_temp=$(echo "$slot_item" | jq ".main.temp" | xargs printf "%.0f")
-                s_dt=$(echo "$slot_item" | jq ".dt")
-                s_time=$(date -d @$s_dt "+%H:%M" 2>/dev/null)
-                s_code=$(echo "$slot_item" | jq -r ".weather[0].icon")
-                s_hex=$(get_hex "$s_code")
-                s_icon=$(get_icon "$s_code")
-
-                hourly_json="${hourly_json} {\"time\": \"${s_time}\", \"temp\": \"${s_temp}\", \"icon\": \"${s_icon}\", \"hex\": \"${s_hex}\"},"
-            done
-            hourly_json="${hourly_json%,}]"
-
-            final_json="${final_json} {
-                \"id\": \"${counter}\",
-                \"day\": \"${f_day}\",
-                \"day_full\": \"${f_full_day}\",
-                \"date\": \"${f_date_num}\",
-                \"max\": \"${f_max_temp}\",
-                \"min\": \"${f_min_temp}\",
-                \"feels_like\": \"${f_feels_like}\",
-                \"wind\": \"${f_wind}\",
-                \"humidity\": \"${f_hum}\",
-                \"pop\": \"${f_pop_pct}\",
-                \"icon\": \"${f_icon}\",
-                \"hex\": \"${f_hex}\",
-                \"desc\": \"${f_desc}\",
-                \"hourly\": ${hourly_json}
-            },"
+            forecast_array=$(echo "$forecast_array" | jq --argjson entry "$day_entry" '. += [$entry]')
 
             counter=$((counter+1))
         done
 
-        final_json="${final_json%,}]"
+        # Create final JSON with location and forecast
+        final_json=$(echo "$forecast_array" | jq -n --slurpfile forecast /dev/stdin --arg city "$city_name" '{location: $city, forecast: $forecast[0]}')
 
-        echo "{ \"location\": \"${city_name}\", \"forecast\": ${final_json} }" > "${json_file}"
+        echo "$final_json" > "${json_file}.tmp"
+        mv "${json_file}.tmp" "${json_file}"
     fi
 }
 
@@ -227,7 +300,7 @@ if [[ "$1" == "--json" ]]; then
     if [ -f "$ENV_FILE" ]; then
         env_mtime=$(stat -c %Y "$ENV_FILE")
         last_env_mtime=$(cat "$env_tracker_file" 2>/dev/null || echo "0")
-        
+
         if [ "$env_mtime" -gt "$last_env_mtime" ]; then
             env_changed=1
             echo "$env_mtime" > "$env_tracker_file"
@@ -238,15 +311,15 @@ if [[ "$1" == "--json" ]]; then
         file_time=$(stat -c %Y "$json_file")
         current_time=$(date +%s)
         diff=$((current_time - file_time))
-        
+
         if [ "$env_changed" -eq 1 ]; then
             # The user just modified the .env file. Bypass cache entirely.
-            touch "$json_file" 
+            touch "$json_file"
             get_data &
         elif grep -qE '"desc": "(No API Key|Invalid Key|API Error)"' "$json_file"; then
             # Error state. Check every 5 minutes instead of 1 hour.
             if [ $diff -gt 300 ]; then
-                touch "$json_file" 
+                touch "$json_file"
                 get_data &
             fi
         else

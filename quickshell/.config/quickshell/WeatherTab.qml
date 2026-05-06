@@ -235,14 +235,10 @@ Item {
                     height: parent.height - 60
                     spacing: 8
                     clip: false
-                    
-                    Component.onCompleted: console.log("Forecast Row width:", width)
-                    
+
                     Repeater {
                         model: forecastModel.updateCount >= 0 ? Math.min(3, forecastModel.forecast.length) : 0
-                        
-                        onModelChanged: console.log("Forecast Repeater model changed:", model)
-                        
+
                         Rectangle {
                             width: (parent.width - (2 * 8)) / 3
                             height: parent.height
@@ -372,7 +368,7 @@ Item {
     property bool hasInitialLoad: false
     Timer {
         id: initialLoadTimer
-        interval: 5000 // 5 seconds
+        interval: 100 // Load almost immediately after tab becomes active
         running: root.active && !hasInitialLoad
         repeat: false
         onTriggered: {
@@ -437,31 +433,32 @@ Item {
                     
                     // Store useFahrenheit setting for forecast parsing
                     forecastModel.useFahrenheit = useFahrenheit
-                    
+
                     // Use OpenWeather API if key is available, otherwise use wttr.in
                     if (apiKey && latitude && longitude) {
-                        console.log("Using OpenWeather API")
                         const units = useFahrenheit ? "imperial" : "metric"
-                        
-                        // Current weather with OpenWeather
-                        let owWeatherCmd = `curl -s "https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&units=${units}&appid=${apiKey}"`
-                        openWeatherProcess.command = ["sh", "-c", owWeatherCmd]
+
+                        // Safely construct URLs with proper escaping
+                        const lat = String(latitude).replace(/[^0-9.-]/g, "")
+                        const lon = String(longitude).replace(/[^0-9.-]/g, "")
+                        const unit = String(units).replace(/[^a-z]/g, "")
+                        const key = String(apiKey).replace(/[^a-zA-Z0-9]/g, "")
+
+                        // Current weather with OpenWeather - use argument array, not sh -c
+                        openWeatherProcess.command = ["curl", "-s", "https://api.openweathermap.org/data/2.5/weather?lat=" + lat + "&lon=" + lon + "&units=" + unit + "&appid=" + key]
                         openWeatherProcess.running = true
-                        
-                        // 5-day forecast with OpenWeather
-                        let owForecastCmd = `curl -s "https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&units=${units}&appid=${apiKey}"`
-                        openWeatherForecastProcess.command = ["sh", "-c", owForecastCmd]
+
+                        // 5-day forecast with OpenWeather - use argument array, not sh -c
+                        openWeatherForecastProcess.command = ["curl", "-s", "https://api.openweathermap.org/data/2.5/forecast?lat=" + lat + "&lon=" + lon + "&units=" + unit + "&appid=" + key]
                         openWeatherForecastProcess.running = true
                     } else {
-                        console.log("Using wttr.in")
-                        // Current weather with wttr.in
-                        let weatherCmd = `curl -s "wttr.in/${location}?${tempUnit}&format=%c|%t|%C|%h|%w|%l|%f|%p"`
-                        weatherProcess.command = ["sh", "-c", weatherCmd]
+                        // Current weather with wttr.in - sanitize location
+                        const safeLocation = String(location || "").replace(/[^a-zA-Z0-9,-]/g, "")
+                        weatherProcess.command = ["sh", "-c", "curl -s 'wttr.in/" + safeLocation + "?" + tempUnit + "&format=%c|%t|%C|%h|%w|%l|%f|%p'"]
                         weatherProcess.running = true
-                        
+
                         // Forecast with wttr.in (3 days)
-                        let forecastCmd = `curl -s "wttr.in/${location}?${tempUnit}&format=j1"`
-                        forecastProcess.command = ["sh", "-c", forecastCmd]
+                        forecastProcess.command = ["sh", "-c", "curl -s 'wttr.in/" + safeLocation + "?" + tempUnit + "&format=j1'"]
                         forecastProcess.running = true
                     }
                 } catch (e) {
@@ -482,6 +479,7 @@ Item {
         
         stdout: SplitParser {
             onRead: data => {
+                console.log("Weather current output:", data);
                 const parts = data.trim().split('|')
                 if (parts.length >= 7) {
                     currentIcon.text = (parts[0] || "🌡️").trim()
@@ -514,13 +512,11 @@ Item {
         
         onRunningChanged: {
             if (!running && buffer !== "") {
-                console.log("Forecast buffer length:", buffer.length)
+                console.log("Forecast buffer length:", buffer.length);
                 try {
                     const data = JSON.parse(buffer)
-                    console.log("Forecast data parsed, weather array length:", data.weather ? data.weather.length : 0)
                     if (data.weather && Array.isArray(data.weather)) {
                         forecastModel.parseForecast(data.weather)
-                        console.log("Forecast parsed, items:", forecastModel.forecast.length)
                     } else {
                         console.error("No weather data in forecast response")
                     }
@@ -530,6 +526,7 @@ Item {
                 }
                 buffer = ""
             } else if (running) {
+                console.log("Forecast process started");
                 buffer = ""
             }
         }
@@ -550,8 +547,7 @@ Item {
             if (!running && buffer !== "") {
                 try {
                     const data = JSON.parse(buffer)
-                    console.log("OpenWeather current data received")
-                    
+
                     if (data.weather && data.weather[0]) {
                         currentIcon.text = getOpenWeatherIcon(data.weather[0].id)
                         currentCondition.text = data.weather[0].description
@@ -594,8 +590,7 @@ Item {
             if (!running && buffer !== "") {
                 try {
                     const data = JSON.parse(buffer)
-                    console.log("OpenWeather forecast data received, list length:", data.list ? data.list.length : 0)
-                    
+
                     if (data.list && data.list.length > 0) {
                         forecastModel.parseOpenWeatherForecast(data.list)
                     }
@@ -620,13 +615,10 @@ Item {
         
         function parseForecast(weatherData) {
             forecast = []
-            console.log("Parsing forecast with useFahrenheit:", useFahrenheit)
             for (let i = 0; i < Math.min(5, weatherData.length); i++) {
                 let day = weatherData[i]
-                console.log("Day", i, "data:", JSON.stringify(day).substring(0, 200))
                 let high = useFahrenheit ? (day.maxtempF + "°F") : (day.maxtempC + "°C")
                 let low = useFahrenheit ? (day.mintempF + "°F") : (day.mintempC + "°C")
-                console.log("Day", i, "temps:", high, low)
                 forecast.push({
                     date: day.date || "",
                     highTemp: high || "--",
@@ -635,7 +627,6 @@ Item {
                     icon: getWeatherIcon(day.hourly && day.hourly[0] ? day.hourly[0].weatherCode : "")
                 })
             }
-            console.log("Forecast array populated with", forecast.length, "items")
             updateCount++
         }
         
@@ -700,8 +691,6 @@ Item {
                     icon: getOpenWeatherIcon(mostCommonIcon)
                 })
             }
-            
-            console.log("OpenWeather forecast parsed,", forecast.length, "days")
             updateCount++
         }
         

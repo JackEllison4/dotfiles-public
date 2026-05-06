@@ -75,7 +75,7 @@
     "pulseaudio": {
         "format": "{icon} {volume}%",
         "format-muted": "󰝟 Muted",
-        "on-click": "volumectl toggle-mute", 
+        "on-click": "volumectl toggle-mute", // Change this from pavucontrol
         "on-click-right": "pavucontrol",
         "on-scroll-up": "volumectl up",
         "on-scroll-down": "volumectl down",
@@ -130,7 +130,7 @@
     },
 
     "custom/power": {
-        "format": "⏻",
+        "format": "⏻ ",
         "tooltip": false,
         "on-click": "bash ~/.config/waybar/scripts/power_menu.sh"
     }

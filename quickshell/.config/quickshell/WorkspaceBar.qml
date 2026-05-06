@@ -6,49 +6,56 @@ import Quickshell.Io
 
 RowLayout {
     id: workspaceBar
-    spacing: 4
 
     property var workspaceData: []
 
-    // Polling timer for hyprctl
-    Timer {
-        interval: 500
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: hyprctlPoller.running = true
-    }
+    spacing: 6
 
-    // Robust hyprctl process with buffering
+    // Signal based workspace updates - much more efficient and instant
     Process {
-        id: hyprctlPoller
-        command: ["hyprctl", "workspaces", "-j"]
-        running: false
-        
-        property string buffer: ""
-        
+        id: eventWatcher
+        running: true
+        command: ["sh", "-c", "socat -U - UNIX-CONNECT:$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock | grep --line-buffered -E 'workspace|window'"]
         stdout: SplitParser {
-            onRead: data => {
-                hyprctlPoller.buffer += data
+            onRead: {
+                hyprctlPoller.running = true;
             }
         }
-        
+    }
+
+    Component.onCompleted: {
+        hyprctlPoller.running = true;
+    }
+
+    Process {
+        id: hyprctlPoller
+
+        property string buffer: ""
+
+        command: ["hyprctl", "workspaces", "-j"]
+        running: false
         onRunningChanged: {
             if (!running && buffer !== "") {
                 try {
-                    const parsed = JSON.parse(buffer)
-                    if (Array.isArray(parsed)) {
-                        workspaceBar.workspaceData = parsed
-                    }
+                    const parsed = JSON.parse(buffer);
+                    if (Array.isArray(parsed))
+                        workspaceBar.workspaceData = parsed;
+
                 } catch (e) {
-                    console.log("🎨 Workspace Poll Error:", e)
+                    console.log("🎨 Workspace Poll Error:", e);
                 }
-                buffer = ""
+                buffer = "";
             }
         }
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                hyprctlPoller.buffer += data;
+            }
+        }
+
     }
 
-    // Always show workspaces 1-10
     Repeater {
         model: 10
 
@@ -56,95 +63,72 @@ RowLayout {
             id: staticWorkspaceButton
 
             property int workspaceId: index + 1
-            
-            // Search in polled data
             property var hyprData: {
                 for (let i = 0; i < workspaceBar.workspaceData.length; i++) {
-                    if (workspaceBar.workspaceData[i].id == workspaceId) {
-                        return workspaceBar.workspaceData[i]
-                    }
+                    if (workspaceBar.workspaceData[i].id == workspaceId)
+                        return workspaceBar.workspaceData[i];
+
                 }
-                return null
+                return null;
             }
-
             property bool hasWindows: hyprData ? (hyprData.windows > 0) : false
-
             property bool isCurrentWorkspace: {
-                // Keep Hyprland service for active workspace if it works
-                const monitor = Hyprland.focusedMonitor
-                if (monitor && monitor.activeWorkspace && monitor.activeWorkspace.id == workspaceId) return true
-                return false
+                const monitor = Hyprland.focusedMonitor;
+                return (monitor && monitor.activeWorkspace && monitor.activeWorkspace.id == workspaceId);
             }
 
-            width: 40
+            width: 36
             height: 32
-
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            enabled: true
-            z: 10
+            onClicked: Quickshell.execDetached(["hyprctl", "dispatch", "workspace", workspaceId.toString()])
 
             Rectangle {
                 id: workspaceRect
+
                 anchors.centerIn: parent
-                width: 35
-                height: parent.height - 10
-                radius: 6
-
+                width: 30
+                height: 22
+                radius: 4
+                // Pure neutral white palette - no dark tints
                 color: {
-                    if (staticWorkspaceButton.isCurrentWorkspace) return Qt.rgba(ThemeManager.accentBlue.r, ThemeManager.accentBlue.g, ThemeManager.accentBlue.b, 0.30)
-                    if (staticWorkspaceButton.hasWindows) return Qt.rgba(ThemeManager.accentTeal.r, ThemeManager.accentTeal.g, ThemeManager.accentTeal.b, 0.20)
-                    if (staticWorkspaceButton.containsMouse) return Qt.rgba(1, 1, 1, 0.10)
-                    return "transparent"
-                }
-                border.width: {
-                    if (staticWorkspaceButton.isCurrentWorkspace || staticWorkspaceButton.containsMouse) return 1
-                    if (staticWorkspaceButton.hasWindows) return 1
-                    return 0
-                }
-                border.color: {
-                    if (staticWorkspaceButton.isCurrentWorkspace) return Qt.rgba(ThemeManager.accentBlue.r, ThemeManager.accentBlue.g, ThemeManager.accentBlue.b, 0.55)
-                    if (staticWorkspaceButton.hasWindows) return Qt.rgba(ThemeManager.accentTeal.r, ThemeManager.accentTeal.g, ThemeManager.accentTeal.b, 0.55)
-                    return Qt.rgba(1, 1, 1, 0.18)
-                }
+                    if (staticWorkspaceButton.isCurrentWorkspace)
+                        return Qt.rgba(1, 1, 1, 0.45);
 
-                Behavior on color {
-                    ColorAnimation { duration: 150 }
+                    if (staticWorkspaceButton.containsMouse)
+                        return Qt.rgba(1, 1, 1, 0.25);
+
+                    if (staticWorkspaceButton.hasWindows)
+                        return Qt.rgba(1, 1, 1, 0.15);
+
+                    return "transparent";
                 }
-                Behavior on border.width {
-                    NumberAnimation { duration: 150 }
-                }
+                border.width: staticWorkspaceButton.isCurrentWorkspace ? 1 : 0
+                border.color: Qt.rgba(1, 1, 1, 0.5)
             }
 
             Text {
-                id: workspaceText
-                anchors.centerIn: workspaceRect
+                anchors.centerIn: parent
                 text: staticWorkspaceButton.workspaceId.toString()
                 font.family: "Sen"
-                font.pixelSize: 13
+                font.pixelSize: 12
                 font.bold: staticWorkspaceButton.isCurrentWorkspace
-                textFormat: Text.PlainText
-
                 color: {
-                    if (staticWorkspaceButton.hyprData && staticWorkspaceButton.hyprData.urgent) return ThemeManager.accentRed
-                    if (staticWorkspaceButton.isCurrentWorkspace) return ThemeManager.fgPrimary
-                    if (staticWorkspaceButton.hasWindows) return ThemeManager.fgPrimary
-                    return ThemeManager.fgTertiary
-                }
+                    if (staticWorkspaceButton.hyprData && staticWorkspaceButton.hyprData.urgent)
+                        return "#ff5555";
 
-                Behavior on color {
-                    ColorAnimation { duration: 200 }
+                    if (staticWorkspaceButton.isCurrentWorkspace)
+                        return "#ffffff";
+
+                    return staticWorkspaceButton.hasWindows ? "#ffffff" : Qt.rgba(1, 1, 1, 0.35);
                 }
             }
 
-            onClicked: {
-                console.log("Workspace", staticWorkspaceButton.workspaceId, "clicked")
-                Quickshell.execDetached(["hyprctl", "dispatch", "workspace", staticWorkspaceButton.workspaceId.toString()])
-            }
         }
+
     }
 
-    // Show workspaces 11+ only when in use
+    // Dynamic Workspaces 11+
     Repeater {
         model: workspaceBar.workspaceData
 
@@ -152,89 +136,46 @@ RowLayout {
             id: dynamicWorkspaceButton
 
             required property var modelData
-
             property bool isCurrentWorkspace: {
-                const monitor = Hyprland.focusedMonitor
-                if (monitor && monitor.activeWorkspace && monitor.activeWorkspace.id == modelData.id) return true
-                return false
+                const monitor = Hyprland.focusedMonitor;
+                return (monitor && monitor.activeWorkspace && monitor.activeWorkspace.id == modelData.id);
             }
 
-            // Only show for ID >= 11 (static ones handled above)
             visible: modelData.id >= 11
-
-            width: visible ? 40 : 0
+            width: visible ? 36 : 0
             height: 32
-            opacity: visible ? 1.0 : 0.0
-
-            Behavior on width {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-            }
-            Behavior on opacity {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-            }
-
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            enabled: true
-            z: 10
+            opacity: visible ? 1 : 0
+            onClicked: Quickshell.execDetached(["hyprctl", "dispatch", "workspace", modelData.id.toString()])
 
             Rectangle {
-                id: dynamicWorkspaceRect
                 anchors.centerIn: parent
-                width: 35
-                height: parent.height - 10
-                radius: 6
-
-                color: {
-                    if (dynamicWorkspaceButton.isCurrentWorkspace) return Qt.rgba(ThemeManager.accentBlue.r, ThemeManager.accentBlue.g, ThemeManager.accentBlue.b, 0.30)
-                    if (dynamicWorkspaceButton.modelData.windows > 0) return Qt.rgba(ThemeManager.accentTeal.r, ThemeManager.accentTeal.g, ThemeManager.accentTeal.b, 0.20)
-                    if (dynamicWorkspaceButton.containsMouse) return Qt.rgba(1, 1, 1, 0.10)
-                    return "transparent"
-                }
-                border.width: {
-                    if (dynamicWorkspaceButton.isCurrentWorkspace || dynamicWorkspaceButton.containsMouse) return 1
-                    if (dynamicWorkspaceButton.modelData.windows > 0) return 1
-                    return 0
-                }
-                border.color: {
-                    if (dynamicWorkspaceButton.isCurrentWorkspace) return Qt.rgba(ThemeManager.accentBlue.r, ThemeManager.accentBlue.g, ThemeManager.accentBlue.b, 0.55)
-                    if (dynamicWorkspaceButton.modelData.windows > 0) return Qt.rgba(ThemeManager.accentTeal.r, ThemeManager.accentTeal.g, ThemeManager.accentTeal.b, 0.55)
-                    return Qt.rgba(1, 1, 1, 0.18)
-                }
-
-                Behavior on color {
-                    ColorAnimation { duration: 150 }
-                }
-                Behavior on border.width {
-                    NumberAnimation { duration: 150 }
-                }
+                width: 30
+                height: 22
+                radius: 4
+                color: dynamicWorkspaceButton.isCurrentWorkspace ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(1, 1, 1, 0.15)
+                border.width: dynamicWorkspaceButton.isCurrentWorkspace ? 1 : 0
+                border.color: Qt.rgba(1, 1, 1, 0.5)
             }
 
             Text {
-                id: dynamicWorkspaceText
-                anchors.centerIn: dynamicWorkspaceRect
+                anchors.centerIn: parent
                 text: dynamicWorkspaceButton.modelData.id.toString()
                 font.family: "Sen"
-                font.pixelSize: 13
+                font.pixelSize: 12
                 font.bold: dynamicWorkspaceButton.isCurrentWorkspace
-                textFormat: Text.PlainText
-
-                color: {
-                    if (dynamicWorkspaceButton.modelData.urgent) return ThemeManager.accentRed
-                    if (dynamicWorkspaceButton.isCurrentWorkspace) return ThemeManager.fgPrimary
-                    if (dynamicWorkspaceButton.modelData.windows > 0) return ThemeManager.fgPrimary
-                    return ThemeManager.fgTertiary
-                }
-
-                Behavior on color {
-                    ColorAnimation { duration: 200 }
-                }
+                color: "#ffffff"
             }
 
-            onClicked: {
-                console.log("Workspace", dynamicWorkspaceButton.modelData.id, "clicked")
-                Quickshell.execDetached(["hyprctl", "dispatch", "workspace", dynamicWorkspaceButton.modelData.id.toString()])
+            Behavior on width {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+
             }
+
         }
+
     }
+
 }

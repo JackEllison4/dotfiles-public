@@ -53,15 +53,10 @@ Item {
         }
     }
 
-    // Load settings periodically
-    Timer {
-        interval: 1000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-
-        onTriggered: {
-            settingsLoader.running = true
+    Connections {
+        target: shellRoot
+        function onConfigVersionChanged() {
+            settingsLoader.running = true;
         }
     }
 
@@ -101,8 +96,9 @@ Item {
         }
     }
 
+    // Clock update timer - slowed down to 30s since seconds aren't shown
     Timer {
-        interval: 1000
+        interval: 30000
         running: true
         repeat: true
         triggeredOnStart: true

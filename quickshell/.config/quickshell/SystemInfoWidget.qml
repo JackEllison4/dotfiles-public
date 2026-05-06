@@ -52,7 +52,7 @@ Rectangle {
                     if (settings.general && settings.general.enableBlur !== undefined) {
                         root.enableBlur = settings.general.enableBlur
                     }
-                } catch (e) {}
+                } catch (e) { console.error("Failed to parse system info widget settings:", e); }
                 buffer = ""
             } else if (running) {
                 buffer = ""

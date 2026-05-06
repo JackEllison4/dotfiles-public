@@ -50,25 +50,13 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
     }
 
-    // Update RAM usage every second
-    Timer {
-        interval: 1000
-        running: true
-        repeat: true
-        onTriggered: updateRamUsage()
-    }
-
-    function updateRamUsage() {
-        ramPoller.running = true
-    }
-
+    // Persistent RAM monitoring - more efficient than spawning a process every second
     Process {
         id: ramPoller
-        running: false
+        running: true
         command: [
-            "bash",
-            "-c",
-            "cat /proc/meminfo | awk '/MemTotal:/ {total=$2} /MemAvailable:/ {avail=$2} END {used=total-avail; percent=int((used/total)*100); print sprintf(\"%.1f / %.1f GB (\" percent \"%%)\", used/1024/1024, total/1024/1024)}'"
+            "sh", "-c", 
+            "while true; do awk '/MemTotal:/ {total=$2} /MemAvailable:/ {avail=$2} END {if (total>0) {used=total-avail; percent=int((used/total)*100); print sprintf(\"%.1f / %.1f GB (\" percent \"%%)\", used/1024/1024, total/1024/1024)}}' /proc/meminfo; sleep 10; done"
         ]
 
         stdout: SplitParser {
@@ -77,4 +65,5 @@ Rectangle {
             }
         }
     }
+
 }

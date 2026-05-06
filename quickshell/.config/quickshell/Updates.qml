@@ -39,34 +39,18 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         
         onClicked: {
-            console.log("Updates clicked! Launching updater...")
-            
-            // Use a shell script to determine the best update command and launch it in kitty
-            let updateScript = 'if command -v paru >/dev/null 2>&1; then ' +
-                              'paru -Syu; ' +
-                              'elif command -v yay >/dev/null 2>&1; then ' +
-                              'yay -Syu; ' +
-                              'else ' +
-                              'sudo pacman -Syu; ' +
-                              'fi; ' +
-                              'echo ""; echo "Done - Press enter to exit"; read'
-            
-            console.log("Launching kitty with update command")
-            
-            // Launch kitty terminal with update command
+            // Use direct script execution instead of shell concatenation
+            // Script will handle package manager selection
             try {
                 Quickshell.execDetached([
-                    "kitty", 
-                    "-e", 
-                    "sh", 
-                    "-c", 
-                    updateScript
+                    "kitty",
+                    "-e",
+                    Quickshell.env("HOME") + "/.config/quickshell/scripts/run-updates.sh"
                 ])
-                console.log("Launched updater terminal successfully")
             } catch (error) {
                 console.error("Failed to launch updater:", error)
             }
-            
+
             // Trigger a recheck after a short delay (user might close terminal)
             recheckTimer.start()
         }
@@ -129,23 +113,18 @@ Rectangle {
         
         stdout: SplitParser {
             onRead: data => {
-                console.log("Read data from update check:", data)
                 let count = parseInt(data.trim()) || 0
-                console.log("Parsed update count:", count)
                 updatesArea.updateCount = count
             }
         }
         
         onStarted: {
-            console.log("Update check process started")
         }
-        
+
         onExited: (exitCode, exitStatus) => {
-            console.log("Process exited with code:", exitCode, "status:", exitStatus)
             // Restart the check if it failed (might be network issue)
             if (exitCode !== 0 && !updateTimer.running) {
                 // Don't spam retries, just wait for next timer interval
-                console.log("Update check failed, will retry on next timer")
             }
         }
     }
@@ -158,31 +137,27 @@ Rectangle {
         triggeredOnStart: false
         
         onTriggered: {
-            console.log("Update timer triggered")
             lastCheckTime = new Date()
             updateCheckProcess.running = true
         }
     }
     
-    // Wake-from-sleep detection timer - checks every 5 minutes
-    // If more than 10 minutes have passed since last check, we probably woke from sleep
-    Timer {
-        id: wakeDetectionTimer
-        interval: 300000  // 5 minutes
+    // Signal based wake-from-sleep detection - much more efficient than a timer
+    Process {
+        id: wakeWatcher
         running: true
-        repeat: true
-        
-        onTriggered: {
-            let now = new Date()
-            let timeSinceLastCheck = (now - lastCheckTime) / 1000 / 60  // minutes
-            
-            if (timeSinceLastCheck > 10) {
-                console.log("Detected wake from sleep (", timeSinceLastCheck, "minutes since last check). Triggering update check...")
-                lastCheckTime = now
-                updateCheckProcess.running = true
+        command: ["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"]
+        stdout: SplitParser {
+            onRead: line => {
+                if (line.includes("PrepareForSleep") && line.includes("false")) {
+                    console.log("System resumed from sleep - triggering update check")
+                    lastCheckTime = new Date()
+                    updateCheckProcess.running = true
+                }
             }
         }
     }
+
     
     // Recheck after manual update installation
     Timer {
@@ -196,13 +171,11 @@ Rectangle {
         
         onTriggered: {
             checkCount++
-            console.log("Rechecking updates after manual installation (attempt", checkCount, "of", maxChecks, ")...")
             lastCheckTime = new Date()
             updateCheckProcess.running = true
-            
+
             // Stop checking after maxChecks attempts or if no updates remain
             if (checkCount >= maxChecks || updatesArea.updateCount === 0) {
-                console.log("Stopping recheck timer")
                 running = false
                 checkCount = 0
             }

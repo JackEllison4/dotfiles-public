@@ -7,55 +7,51 @@ import "focustime"
 
 ShellRoot {
     id: shellRoot
+
+    Component.onCompleted: {
+        // Ensure ~/.local/bin is in PATH for notify-send wrapper
+        const currentPath = Quickshell.env("PATH") || ""
+        const homeBin = Quickshell.env("HOME") + "/.local/bin"
+        if (!currentPath.includes(homeBin)) {
+            Quickshell.setEnv("PATH", homeBin + ":" + currentPath)
+        }
+    }
     
     property bool calendarVisible: false
-    property bool appLauncherVisible: false
-    property bool notificationsVisible: false
     property bool powerMenuVisible: false
     property bool themeSwitcherVisible: false
     property bool screenshotVisible: false
     property bool clipboardVisible: false
     property bool controlCenterVisible: false
     property bool focustimeVisible: false
-    property bool isAnyFullscreen: false
-    property var wallpaperPicker: wallpaperPickerWindow
+    property int configVersion: 0
     
     // Make shellRoot globally accessible via objectName
     objectName: "shellRoot"
     
     // Public toggle functions for IPC
-    function toggleAppLauncher() {
-        console.log("IPC: Toggling app launcher")
-        shellRoot.appLauncherVisible = !shellRoot.appLauncherVisible
-    }
-    
+
     function toggleCalendar() {
-        console.log("IPC: Toggling calendar")
         shellRoot.calendarVisible = !shellRoot.calendarVisible
     }
-    
+
     function togglePowerMenu() {
-        console.log("IPC: Toggling power menu")
         shellRoot.powerMenuVisible = !shellRoot.powerMenuVisible
     }
-    
+
     function toggleThemeSwitcher() {
-        console.log("IPC: Toggling theme switcher")
         shellRoot.themeSwitcherVisible = !shellRoot.themeSwitcherVisible
     }
-    
+
     function toggleScreenshot() {
-        console.log("IPC: Toggling screenshot widget")
         shellRoot.screenshotVisible = !shellRoot.screenshotVisible
     }
 
     function toggleClipboard() {
-        console.log("IPC: Toggling clipboard")
         shellRoot.clipboardVisible = !shellRoot.clipboardVisible
     }
-    
+
     function toggleControlCenter() {
-        console.log("IPC: Toggling control center")
         shellRoot.controlCenterVisible = !shellRoot.controlCenterVisible
     }
 
@@ -66,12 +62,14 @@ ShellRoot {
 
     function takeScreenshot() {
         console.log("Taking screenshot via Print Screen")
-        const scriptPath = Quickshell.env("HOME") + "/.config/quickshell/take-screenshot.sh"
+        // Use XDG_CONFIG_HOME with fallback to ~/.config, never trust HOME alone
+        const configHome = Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
+        const scriptPath = configHome + "/quickshell/take-screenshot.sh"
         // Default: output mode, no delay, save to disk, copy to clipboard
         Quickshell.execDetached([scriptPath, "output", "0", "true", "true"])
     }
 
-    // App launcher, wallpaper picker, etc. removed
+
     Connections {
         target: Quickshell
         function onReload() {
@@ -83,7 +81,10 @@ ShellRoot {
     Process {
         id: consolidatedIpcWatcher
         running: true
-        command: [Quickshell.env("HOME") + "/.config/quickshell/consolidated-ipc-watcher.sh"]
+        command: {
+            const configHome = Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
+            return [configHome + "/quickshell/consolidated-ipc-watcher.sh"]
+        }
         
         stdout: SplitParser {
             onRead: line => {
@@ -132,21 +133,13 @@ ShellRoot {
     Process {
         id: focusDaemon
         running: true
-        command: ["python3", Quickshell.env("HOME") + "/.config/quickshell/focustime/focus_daemon.py"]
-    }
-
-    // Fullscreen Watcher - hides bar when a window is fullscreen
-    Process {
-        id: fullscreenWatcher
-        running: true
-        command: [Quickshell.env("HOME") + "/.config/quickshell/fullscreen-watcher.sh"]
-        stdout: SplitParser {
-            onRead: data => {
-                shellRoot.isAnyFullscreen = (data.trim() === "1")
-                console.log("Fullscreen state changed:", shellRoot.isAnyFullscreen)
-            }
+        command: {
+            const configHome = Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
+            return ["python3", configHome + "/quickshell/focustime/focus_daemon.py"]
         }
     }
+
+
 
     // Calendar popup - anchored below clock (center)
     Variants {
@@ -221,64 +214,7 @@ ShellRoot {
         }
     }
     
-    // App Launcher popup - anchored below Arch button
-    Variants {
-        model: Quickshell.screens
-        
-        PanelWindow {
-            property var modelData
-            screen: modelData
-            
-            visible: shellRoot.appLauncherVisible
 
-            anchors {
-                top: true
-                left: true
-                right: true
-                bottom: true
-            }
-
-            margins {
-                top: 0
-                left: 0
-                right: 0
-                bottom: 0
-            }
-
-            color: "transparent"
-            exclusiveZone: 0
-
-            WlrLayershell.namespace: "quickshell-launcher"
-            WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-
-            // Background overlay - click to close
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    console.log("Clicked outside app launcher")
-                    shellRoot.appLauncherVisible = false
-                }
-                propagateComposedEvents: false
-            }
-            
-            // Panel positioned at center, slides down from top
-            Item {
-                width: 1000
-                height: 600
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: shellRoot.appLauncherVisible ? 0 : -800
-
-                Behavior on anchors.verticalCenterOffset {
-                    NumberAnimation { duration: 350; easing.type: Easing.OutCubic }
-                }
-                
-                    // AppLauncher removed
-                    Item { anchors.fill: parent }
-            }
-        }
-    }
     
     // Power Menu popup - anchored below power button (top right)
     Variants {
@@ -362,82 +298,7 @@ ShellRoot {
         }
     }
 
-    // Notifications Panel - top left
-    Variants {
-        model: Quickshell.screens
 
-        PanelWindow {
-            property var modelData
-            screen: modelData
-
-            visible: shellRoot.notificationsVisible
-
-            anchors {
-                top: true
-                left: true
-                right: true
-                bottom: true
-            }
-
-            margins {
-                top: 0
-                left: 0
-                right: 0
-                bottom: 0
-            }
-
-            color: "transparent"
-            exclusiveZone: 0
-
-            WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-
-            // Escape key handler
-            Shortcut {
-                sequence: "Escape"
-                onActivated: {
-                    shellRoot.notificationsVisible = false
-                }
-            }
-
-            // Background overlay - click to close
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    shellRoot.notificationsVisible = false
-                }
-                propagateComposedEvents: true
-            }
-
-            // Panel positioned at top-left
-            Item {
-                width: 550
-                height: 500
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.margins: 20
-                anchors.leftMargin: shellRoot.notificationsVisible ? 20 : -600
-                z: 1
-
-                Behavior on anchors.leftMargin {
-                    NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
-                }
-
-                NotificationsWidget {
-                    anchors.fill: parent
-                    opacity: shellRoot.notificationsVisible ? 1 : 0
-
-                    Behavior on opacity {
-                        NumberAnimation { duration: 250 }
-                    }
-
-                    onRequestClose: {
-                        shellRoot.notificationsVisible = false
-                    }
-                }
-            }
-        }
-    }
 
     // Clipboard Manager Panel
     Variants {
@@ -559,10 +420,10 @@ ShellRoot {
             // Panel positioned at top-right, slides down from top
             Item {
                 width: 420
-                height: 940
+                height: 920
                 anchors.top: parent.top
                 anchors.right: parent.right
-                anchors.topMargin: shellRoot.controlCenterVisible ? 6 : -960
+                anchors.topMargin: shellRoot.controlCenterVisible ? 6 : (height > 0 ? -height - 20 : -1000)
                 anchors.rightMargin: 6
                 
                 Behavior on anchors.topMargin {
@@ -685,8 +546,6 @@ ShellRoot {
             screen: modelData
             
             property bool barAtBottom: false
-            property bool barAutoHide: false
-            property bool barHovered: false
             property bool barFloating: false
             
             // Load bar position and auto-hide settings
@@ -711,9 +570,6 @@ ShellRoot {
                                 if (settings.bar.position) {
                                     barAtBottom = settings.bar.position === "bottom"
                                 }
-                                if (settings.bar.autoHide !== undefined) {
-                                    barAutoHide = settings.bar.autoHide
-                                }
                                 if (settings.bar.floating !== undefined) {
                                     barFloating = settings.bar.floating
                                 }
@@ -726,11 +582,17 @@ ShellRoot {
                 }
             }
             
-            Timer {
-                interval: 1000
+            // Signal based settings reload - dormant until signal received
+            Process {
+                id: signalWatcher
                 running: true
-                repeat: true
-                onTriggered: barPositionLoader.running = true
+                command: ["sh", "-c", "mkdir -p ~/.cache/quickshell; mkfifo ~/.cache/quickshell/bar-signal 2>/dev/null; while true; do cat ~/.cache/quickshell/bar-signal > /dev/null; echo 'reload'; done"]
+                stdout: SplitParser {
+                    onRead: {
+                        barPositionLoader.running = true;
+                        shellRoot.configVersion++;
+                    }
+                }
             }
             
             anchors {
@@ -744,46 +606,15 @@ ShellRoot {
             color: "transparent"
             
             margins {
-                top: (barAutoHide && !barHovered) || shellRoot.isAnyFullscreen ? (barAtBottom ? 0 : -implicitHeight) : (barFloating && !barAtBottom ? 8 : 0)
-                bottom: (barAutoHide && !barHovered) || shellRoot.isAnyFullscreen ? (barAtBottom ? -implicitHeight : 0) : (barFloating && barAtBottom ? 8 : 0)
+                top: barFloating && !barAtBottom ? 8 : 0
+                bottom: barFloating && barAtBottom ? 8 : 0
                 left: barFloating ? 8 : 0
                 right: barFloating ? 8 : 0
-            }
-
-            Behavior on margins.top {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-            }
-
-            Behavior on margins.bottom {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-            }
-
-            Behavior on margins.left {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-            }
-
-            Behavior on margins.right {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
             }
             
             // Explicitly enable interaction
             visible: true
-            exclusiveZone: barAutoHide ? 0 : height
-            
-            // Mouse detection area for auto-hide
-            MouseArea {
-                anchors.fill: parent
-                anchors.topMargin: barAtBottom ? 0 : -10
-                anchors.bottomMargin: barAtBottom ? -10 : 0
-                hoverEnabled: true
-                propagateComposedEvents: true
-                enabled: barAutoHide
-                z: 100
-                
-                onEntered: barHovered = true
-                onExited: barHovered = false
-                onClicked: function(mouse) { mouse.accepted = false }
-            }
+            exclusiveZone: height
             
             Bar {
                 id: bar
@@ -798,14 +629,7 @@ ShellRoot {
                     }
                 }
                 
-                // Connect launcher toggle signal (Arch button) - now for notifications
-                Connections {
-                    target: bar.archComponent
-                    function onToggleLauncher() {
-                        shellRoot.notificationsVisible = !shellRoot.notificationsVisible
-                        console.log("Notifications toggled:", shellRoot.notificationsVisible)
-                    }
-                }
+                // ArchButton calls swaync-client -t directly — no connection needed here
                 
                 // Connect power menu toggle signal
                 Connections {

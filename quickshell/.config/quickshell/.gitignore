@@ -27,13 +27,8 @@ Theme.qml.example
 qmldir.disabled
 qmldir.bak
 
-# User-specific settings and local data
-settings.json
-calendar.ics
-.env
-.env.*
-!.env.example
-!.env.*.example
+# User-specific settings (optional - you may want to commit settings.json)
+# settings.json
 
 # Logs
 *.log

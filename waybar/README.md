@@ -2,8 +2,6 @@
 
 A lightweight and reliable bar with widgets for time, media controls, volume controls, battery status, power profiles, workspace status, and more.
 
-![Preview](image.png)
-
 ## Features
 
 - **MPRIS Integration**: Integrated media player controls with `playerctl` support.
@@ -44,3 +42,6 @@ exec-once = waybar
 ## Configuration
 
 The configuration is located in `~/.config/waybar/config.jsonc` and styling in `~/.config/waybar/style.css`.
+
+## Preview
+![Preview](image.png)

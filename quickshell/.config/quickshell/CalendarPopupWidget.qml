@@ -164,7 +164,7 @@ Item {
 
     property real globalOrbitAngle: 0
     NumberAnimation on globalOrbitAngle {
-        from: 0; to: Math.PI * 2; duration: 90000; loops: Animation.Infinite; running: true
+        from: 0; to: Math.PI * 2; duration: 90000; loops: Animation.Infinite; running: window.visible
     }
 
     // -------------------------------------------------------------------------
@@ -180,7 +180,7 @@ Item {
     }
 
     Timer {
-        interval: 1000; running: true; repeat: true
+        interval: 1000; running: window.visible; repeat: true
         onTriggered: {
             window.currentTime = new Date();
             window.secondPulse = 1.06; // Gentle pulse
@@ -309,7 +309,7 @@ Item {
             onStreamFinished: {
                 let txt = this.text.trim();
                 if (txt !== "") {
-                    try { window.weatherData = JSON.parse(txt); } catch(e) {}
+                    try { window.weatherData = JSON.parse(txt); } catch(e) { console.error("Failed to parse weather data:", e); }
                 }
             }
         }
@@ -516,6 +516,7 @@ Item {
                 property real levitation: 0
                 SequentialAnimation on levitation {
                     loops: Animation.Infinite
+                    running: window.visible
                     NumberAnimation { to: window.s(-15); duration: 4000; easing.type: Easing.InOutSine }
                     NumberAnimation { to: 0; duration: 4000; easing.type: Easing.InOutSine }
                 }
@@ -523,7 +524,7 @@ Item {
                 property real orbitBreath: 1.0
                 SequentialAnimation on orbitBreath {
                     loops: Animation.Infinite
-                    running: true
+                    running: window.visible
                     NumberAnimation { to: 1.035; duration: 3500; easing.type: Easing.InOutSine }
                     NumberAnimation { to: 1.0; duration: 3500; easing.type: Easing.InOutSine }
                 }
@@ -531,21 +532,21 @@ Item {
                 // 3D Perspective Wobble (Pitch, Yaw, Roll)
                 property real pitchBreath: 0
                 SequentialAnimation on pitchBreath {
-                    loops: Animation.Infinite; running: true
+                    loops: Animation.Infinite; running: window.visible
                     NumberAnimation { to: 3.5; duration: 4200; easing.type: Easing.InOutSine }
                     NumberAnimation { to: -3.5; duration: 4200; easing.type: Easing.InOutSine }
                 }
 
                 property real yawBreath: 0
                 SequentialAnimation on yawBreath {
-                    loops: Animation.Infinite; running: true
+                    loops: Animation.Infinite; running: window.visible
                     NumberAnimation { to: 2.5; duration: 5100; easing.type: Easing.InOutSine }
                     NumberAnimation { to: -2.5; duration: 5100; easing.type: Easing.InOutSine }
                 }
 
                 property real rollBreath: 0
                 SequentialAnimation on rollBreath {
-                    loops: Animation.Infinite; running: true
+                    loops: Animation.Infinite; running: window.visible
                     NumberAnimation { to: 1.5; duration: 5800; easing.type: Easing.InOutSine }
                     NumberAnimation { to: -1.5; duration: 5800; easing.type: Easing.InOutSine }
                 }
@@ -882,7 +883,7 @@ Item {
                             
                             property real pulseOffset: 0
                             SequentialAnimation on pulseOffset {
-                                loops: Animation.Infinite; running: true
+                                loops: Animation.Infinite; running: window.visible
                                 NumberAnimation { to: window.s(-3); duration: 1000; easing.type: Easing.InOutSine }
                                 NumberAnimation { to: 0; duration: 1000; easing.type: Easing.InOutSine }
                             }
@@ -922,7 +923,7 @@ Item {
                             
                             property real pulseOffset: 0
                             SequentialAnimation on pulseOffset {
-                                loops: Animation.Infinite; running: true
+                                loops: Animation.Infinite; running: window.visible
                                 NumberAnimation { to: window.s(3); duration: 1000; easing.type: Easing.InOutSine }
                                 NumberAnimation { to: 0; duration: 1000; easing.type: Easing.InOutSine }
                             }
@@ -1129,9 +1130,9 @@ Item {
                     property real phase2: 0
                     property real phase3: 0
                     
-                    NumberAnimation on phase1 { from: 0; to: Math.PI * 2; duration: 4000; loops: Animation.Infinite; running: true }
-                    NumberAnimation on phase2 { from: 0; to: Math.PI * 2; duration: 5500; loops: Animation.Infinite; running: true }
-                    NumberAnimation on phase3 { from: 0; to: Math.PI * 2; duration: 7000; loops: Animation.Infinite; running: true }
+                    NumberAnimation on phase1 { from: 0; to: Math.PI * 2; duration: 4000; loops: Animation.Infinite; running: window.visible }
+                    NumberAnimation on phase2 { from: 0; to: Math.PI * 2; duration: 5500; loops: Animation.Infinite; running: window.visible }
+                    NumberAnimation on phase3 { from: 0; to: Math.PI * 2; duration: 7000; loops: Animation.Infinite; running: window.visible }
                     
                     onPhase1Changed: requestPaint()
                     
@@ -1238,7 +1239,7 @@ Item {
                             ScrollBar.vertical.policy: ScrollBar.AsNeeded
                             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                             visible: window.scheduleData && window.scheduleData.events && window.scheduleData.events.length > 0
-                            contentWidth: scheduleRow.width
+                            contentWidth: parent.width
                             contentHeight: parent.height
 
                             Column {
